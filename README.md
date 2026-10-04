@@ -10,7 +10,7 @@ This repository belongs to [Tyrant-4](https://github.com/Tyrant-4). It is based 
 - Connect measurements to the PC performance dashboard, with clear labels for measured data and unavailable metrics.
 - Compare container configurations and improve performance based on recorded evidence.
 
-These custom profiling additions are planned and are not yet implemented in this fork. No custom Tyrantlator APK has been released yet.
+The `profiling` branch adds the first integration: an opt-in export of the existing app HUD frame source to the existing PC dashboard. See [profiling setup and measurement limits](profiling/README.md). Exact native layer timings remain planned. No custom Tyrantlator APK has been released yet.
 
 ## Upstream Bannerlator documentation
 

@@ -281,6 +281,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
     // Single authoritative FPS source: ticked once per present, read by every overlay so they all
     // show the identical number (there is one place per renderer to feed).
     private final FpsCounter fpsCounter = new FpsCounter();
+    private com.winlator.star.perf.ProfileExporter profileExporter;
     // Lazily built when the Task Manager first polls; snapshots CPU/GPU/RAM/battery for the header.
     private com.winlator.star.widget.HudMetrics tmHudMetrics;
     private boolean fpsHudHorizontal = false;   // active FPS-overlay orientation (tap to toggle in-game)
@@ -1368,6 +1369,13 @@ public class XServerDisplayActivity extends AppCompatActivity {
         // upgrade it to the real API — "D3D12 · VKD3D" for D3D12 titles, "D3D11 · DXVK" etc. for the
         // wrapped path, or "Vulkan"/"Zink"/"OpenGL" for native-API games.
         startDxApiDetection(rendererMode, dxName);
+        EnvVars profileEnv = effectiveUserEnv();
+        if (profileExporter == null && profileEnv != null
+                && "1".equals(profileEnv.get("TYRANTLATOR_PROFILE"))) {
+            profileExporter = new com.winlator.star.perf.ProfileExporter(this, fpsCounter,
+                    currentLogGameName(), container.id, waylandMode ? "wayland" : resolvedR,
+                    () -> hudCounterEnabled && frameRatingWindowId != -1);
+        }
     }
 
     /**
@@ -7215,6 +7223,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (profileExporter != null) { profileExporter.close(); profileExporter = null; }
         // The last word on the handheld's companion screen, whatever took this session down (Exit, the
         // game's own watcher, a recents swipe, the system). Every other dismissal is about telling the
         // user something sooner; this one is the guarantee that nothing is left on the handheld

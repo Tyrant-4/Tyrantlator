@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REDMAGIC Live Profiler</title>
+<style>
+:root{color-scheme:dark;--bg:#0a0d12;--panel:#131a22;--panel2:#17212b;--line:#273440;--text:#eaf4f4;--muted:#9fb0bb;--cyan:#4be0d2;--amber:#ffca73;--red:#ff727d;--blue:#7faeff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% -12%,#16383b 0,transparent 34%),var(--bg);font:14px/1.45 "Segoe UI",Arial,sans-serif;color:var(--text)}
+.wrap{max-width:1540px;margin:auto;padding:25px 28px 40px}header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}h1{font-size:27px;margin:0;letter-spacing:.02em}h2{font-size:15px;margin:0 0 12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}.eyebrow{color:var(--cyan);font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}.sub{color:var(--muted);margin:5px 0 0}.status{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:8px 12px;color:var(--muted);white-space:nowrap}.dot{width:8px;height:8px;border-radius:50%;background:var(--amber)}.status.live .dot{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}.status.stale .dot{background:var(--red)}
+.hero{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:18px;margin-bottom:18px}.panel{background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px;padding:18px;min-width:0;box-shadow:0 12px 35px #0002}.diagnosis{border-left:4px solid var(--amber)}.diagnosis.good{border-left-color:var(--cyan)}.diagnosis.hot{border-left-color:var(--red)}.clue{font-size:25px;font-weight:750;line-height:1.2;margin:6px 0 10px}.detail{color:var(--muted);margin:4px 0}.detail b{color:var(--text)}.identity{display:grid;gap:9px}.identity div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:7px}.identity span:first-child{color:var(--muted)}.identity span:last-child{text-align:right;overflow-wrap:anywhere}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.metric{padding:15px 17px}.metric .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.metric .value{font-size:29px;font-weight:750;margin:6px 0 1px}.metric .hint{font-size:12px;color:var(--muted)}.accent{color:var(--cyan)}.warn{color:var(--amber)}.bad{color:var(--red)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}canvas{width:100%;height:248px;display:block}.legend{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-top:7px;flex-wrap:wrap}.swatch{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}.rows{display:grid;gap:5px}.row{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #27344080;padding:6px 0}.row span:first-child{color:var(--muted)}.row span:last-child{text-align:right}.core{display:grid;grid-template-columns:34px 1fr 46px;align-items:center;gap:9px;margin:8px 0}.track{height:8px;background:#263340;border-radius:8px;overflow:hidden}.fill{height:100%;background:var(--cyan);border-radius:8px}.core.hot .fill{background:var(--amber)}.core small{color:var(--muted);grid-column:2 / 4;margin-top:-7px}.events{max-height:350px;overflow:auto}.event{border-left:2px solid var(--amber);padding:8px 0 9px 11px;margin:0 0 10px;background:#ffffff05}.event.hitch,.event.memory{border-color:var(--red)}.event .time{color:var(--muted);font-size:11px;margin-right:8px}.event .title{font-weight:700}.event .why{color:var(--muted);font-size:12px;margin-top:3px}.empty{color:var(--muted);padding:14px 0}.foot{margin:18px 0 0;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}.foot code{color:var(--text);overflow-wrap:anywhere}
+@media(max-width:1100px){.grid{grid-template-columns:1fr 1fr}.grid .panel:last-child{grid-column:1 / -1}}@media(max-width:760px){.wrap{padding:18px}.hero,.charts,.grid{grid-template-columns:1fr}.grid .panel:last-child{grid-column:auto}.metrics{grid-template-columns:1fr 1fr}h1{font-size:22px}.clue{font-size:22px}}@media(max-width:460px){.metrics{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <header><div><div class="eyebrow">PC-assisted profiling · REDMAGIC</div><h1>Live game performance</h1><p class="sub">Local readings from your phone, with a rolling history of slowdowns.</p></div><div id="status" class="status"><span class="dot"></span><span id="statusText">Waiting for sampler</span></div></header>
+ <section class="hero">
+  <div id="diagnosis" class="panel diagnosis"><div class="eyebrow">Bottleneck clue</div><div id="clue" class="clue">Waiting for a game</div><p id="evidence" class="detail">The dashboard will attach when the profiler starts.</p><p class="detail"><b>Check next:</b> <span id="nextCheck">Start a game in the container.</span></p></div>
+  <div class="panel identity"><div><span>Game</span><span id="game">—</span></div><div><span>Container</span><span id="container">—</span></div><div><span>Backend indicators</span><span id="backend">—</span></div><div><span>Updated</span><span id="updated">—</span></div></div>
+ </section>
+ <section class="metrics">
+  <div class="panel metric"><div class="label">Surface update p95</div><div id="p95" class="value">—</div><div id="p95Hint" class="hint">Compositor timing, not game FPS</div></div>
+  <div class="panel metric"><div class="label">GPU busy</div><div id="gpu" class="value">—</div><div id="gpuHint" class="hint">Driver sample</div></div>
+  <div class="panel metric"><div class="label">Game CPU use</div><div id="cpu" class="value">—</div><div id="cpuHint" class="hint">Equivalent fully busy cores</div></div>
+  <div class="panel metric"><div class="label">Available memory</div><div id="memory" class="value">—</div><div id="memoryHint" class="hint">System RAM available</div></div>
+ </section>
+ <section class="panel" style="margin:18px 0"><h2>Tyrantlator app frame source</h2><div id="appProfileRows" class="rows empty">Optional custom-build telemetry is unavailable.</div><canvas id="appIntervalChart" role="img" aria-label="App HUD present intervals in milliseconds"></canvas><p class="detail">This reads the existing app HUD counter, before native frame generation. It follows the app's bound game window; its session name can differ from the automatically selected CPU process. It does not measure GPU execution or frames on glass.</p></section>
+ <section class="charts">
+  <div class="panel"><h2>Latest surface update intervals</h2><canvas id="intervalChart" role="img" aria-label="Latest compositor update intervals in milliseconds"></canvas><div class="legend"><span><i class="swatch" style="background:var(--cyan)"></i>Updates</span><span><i class="swatch" style="background:var(--amber)"></i>Target frame budget</span><span><i class="swatch" style="background:var(--red)"></i>Over 50 ms</span><span>Above 120 ms reaches chart top</span></div></div>
+  <div class="panel"><h2>Recent pressure · last 120 samples</h2><canvas id="historyChart" role="img" aria-label="Recent compositor p95 and GPU busy trend"></canvas><div class="legend"><span><i class="swatch" style="background:var(--cyan)"></i>Surface p95, ms</span><span><i class="swatch" style="background:var(--blue)"></i>GPU busy, %</span></div></div>
+ </section>
+ <section class="grid">
+  <div class="panel"><h2>CPU by core</h2><div id="cores" class="empty">Waiting for CPU samples.</div><div id="cpuPolicy" class="detail"></div></div>
+  <div class="panel"><h2>Where the CPU time appears</h2><div id="layers" class="rows empty">Waiting for a game.</div><p class="detail">Named worker rows cover only part of each runtime and overlap whole-game CPU work.</p></div>
+  <div class="panel"><h2>Slowdown events</h2><div id="events" class="events empty">No notable events yet.</div></div>
+ </section>
+ <section class="grid" style="margin-top:18px">
+  <div class="panel"><h2>Memory and swap</h2><div id="memoryRows" class="rows empty">Waiting for readings.</div></div>
+  <div class="panel"><h2>Temperature sensors</h2><div id="thermalRows" class="rows empty">Waiting for readings.</div></div>
+  <div class="panel"><h2>Other signals</h2><div id="otherRows" class="rows empty">Waiting for readings.</div></div>
+ </section>
+ <div class="foot"><span>SurfaceFlinger updates are not game frames. Backend names are indicators; exact per-frame FEX, Wine, DXVK, VKD3D, Turnip and GPU execution time remains unavailable.</span><span>Session CSV: <code id="csv">—</code></span></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(x,d=1)=>x===null||x===undefined||!Number.isFinite(Number(x))?'—':Number(x).toFixed(d);
+const put=(id,value)=>{$(id).textContent=value};
+function row(label,value){const d=document.createElement('div');d.className='row';const a=document.createElement('span'),b=document.createElement('span');a.textContent=label;b.textContent=value;d.append(a,b);return d}
+function rows(id,items){const root=$(id);root.className='rows';root.replaceChildren(...items.map(x=>row(x[0],x[1])))}
+function chart(canvas,series,opts={}){
+ const scale=window.devicePixelRatio||1,w=Math.max(200,canvas.clientWidth),h=canvas.clientHeight;
+ canvas.width=Math.round(w*scale);canvas.height=Math.round(h*scale);const c=canvas.getContext('2d');c.scale(scale,scale);c.clearRect(0,0,w,h);
+ const left=42,right=opts.rightAxis?38:15,top=12,bottom=24,ph=h-top-bottom,pw=w-left-right;
+ c.font='11px Segoe UI,Arial';c.strokeStyle='#293743';c.fillStyle='#92a6b1';c.lineWidth=1;
+ const max=opts.max||60;
+ for(let i=0;i<=4;i++){const y=top+ph*i/4;c.beginPath();c.moveTo(left,y);c.lineTo(left+pw,y);c.stroke();c.fillText(String(Math.round(max*(1-i/4))),4,y+4);if(opts.rightAxis)c.fillText(String(Math.round(100*(1-i/4))),left+pw+7,y+4)}
+ if(opts.target){const y=top+ph*(1-opts.target/max);c.strokeStyle='#ffca73';c.setLineDash([5,5]);c.beginPath();c.moveTo(left,y);c.lineTo(left+pw,y);c.stroke();c.setLineDash([])}
+ if(!series.length){c.fillStyle='#9fb0bb';c.fillText('Waiting for samples',left+12,top+ph/2);return}
+ const count=Math.max(...series.map(s=>s.values.length),2);const x=i=>left+pw*i/(count-1);
+ for(const s of series){c.beginPath();c.strokeStyle=s.color;c.lineWidth=2;let active=false;
+  s.values.forEach((v,i)=>{if(v===null||v===undefined||!Number.isFinite(Number(v))){active=false;return}const y=top+ph*(1-Math.min(Number(v),s.max||max)/(s.max||max));if(!active)c.moveTo(x(i),y);else c.lineTo(x(i),y);active=true});c.stroke();
+  if(s.spikes){s.values.forEach((v,i)=>{if(Number(v)>50){c.fillStyle='#ff727d';c.beginPath();c.arc(x(i),top+ph*(1-Math.min(Number(v),max)/max),3,0,Math.PI*2);c.fill()}})}
+ }
+ c.fillStyle='#92a6b1';c.fillText('older',left,h-4);c.fillText('now',left+pw-24,h-4)
+}
+let latest=null;
+window.renderProfileData=function(d){latest=d;const age=Date.now()-Date.parse(d.generated_at);const live=age<10000;const status=$('status');status.className='status '+(live?'live':'stale');put('statusText',live?'LIVE · updating':`Paused · last sample ${Math.round(age/1000)}s ago`);
+ put('game',d.game==='Unavailable'?'Waiting for game':`${d.game} · PID ${d.game_pid}`);put('container',d.container==='auto'?'Detecting':d.container);put('backend',d.backend);put('updated',new Date(d.generated_at).toLocaleTimeString());
+ put('clue',d.assessment);put('evidence',d.evidence);put('nextCheck',d.next_check);$('diagnosis').className='panel diagnosis '+(d.assessment.includes('No clear')?'good':d.assessment.includes('JIT')||d.assessment.includes('Memory')?'hot':'');
+ put('p95',fmt(d.surface.p95_ms)+' ms');put('p95Hint',`${d.surface.spikes_33} over 33 ms · ${d.surface.spikes_50} over 50 ms · ${d.surface.updates} updates`);
+ put('gpu',fmt(d.gpu.busy_percent,0)+'%');put('gpuHint',`Recent average ${fmt(d.gpu.recent_busy_percent,0)}% · driver busy`);
+ put('cpu',d.cpu.game_ms_per_s===null?'—':fmt(d.cpu.game_ms_per_s/1000,2));put('cpuHint',`${fmt(d.cpu.game_ms_per_s,0)} ms/s · ${d.cpu.cores_over_90} cores ≥90% busy`);
+ put('memory',fmt(d.memory.available_mb,0)+' MB');put('memoryHint',`Game RSS ${fmt(d.memory.game_rss_mb,0)} MB`);
+ const intervals=d.surface.intervals_ms||[];const mx=Math.max(60,...intervals.filter(x=>Number.isFinite(Number(x))).map(Number));chart($('intervalChart'),[{values:intervals,color:'#4be0d2',spikes:true}],{max:Math.min(120,Math.ceil(mx/10)*10),target:1000/d.target_fps});
+ const hist=d.history||[];const maxHist=Math.max(60,...hist.map(x=>Number(x.surface_p95_ms)||0));chart($('historyChart'),[{values:hist.map(x=>x.surface_p95_ms),color:'#4be0d2'},{values:hist.map(x=>x.gpu_busy_percent),color:'#7faeff',max:100}],{max:Math.min(120,Math.ceil(maxHist/10)*10),rightAxis:true});
+ const cores=$('cores');cores.className='';cores.replaceChildren();for(const item of d.cpu.cores||[]){const box=document.createElement('div');box.className='core '+(item.busy_percent>=90?'hot':'');const name=document.createElement('b');name.textContent='C'+item.index;const track=document.createElement('div');track.className='track';const fill=document.createElement('div');fill.className='fill';fill.style.width=Math.max(0,Math.min(100,Number(item.busy_percent)||0))+'%';track.append(fill);const pct=document.createElement('span');pct.textContent=fmt(item.busy_percent,0)+'%';const freq=document.createElement('small');freq.textContent=`${fmt(item.current_mhz,0)} / ${fmt(item.allowed_mhz,0)} MHz (current / allowed)`;box.append(name,track,pct,freq);cores.append(box)}
+ put('cpuPolicy',`Allowed CPU frequency change this run: ${fmt(d.cpu.policy_drop_percent,0)}%. Core 6 allowed limit: ${fmt(d.cpu.policy_cap_percent,0)}% of hardware maximum; this alone does not prove thermal throttling.`);
+ rows('layers',(d.layers||[]).map(x=>[x.name,x.value]));
+ const app=d.app_profile||{};rows('appProfileRows',[['Export status',app.status||'Custom-build telemetry unavailable'],['App session',app.game?`${app.game} · container ${app.container_id} · ${app.display_backend}`:'—'],['App HUD FPS',fmt(app.fps)],['App present p95',fmt(app.p95_ms)+' ms']]);
+ chart($('appIntervalChart'),(app.intervals_ms||[]).length?[{values:app.intervals_ms,color:'#4be0d2',spikes:true}]:[],{max:120,target:1000/d.target_fps});
+ const eventRoot=$('events');eventRoot.className='events';eventRoot.replaceChildren();const events=(d.events||[]).slice().reverse();if(!events.length){eventRoot.className='events empty';eventRoot.textContent='No notable events yet.'}else for(const e of events){const box=document.createElement('div');box.className='event '+e.kind;const time=document.createElement('span');time.className='time';time.textContent=e.time;const title=document.createElement('span');title.className='title';title.textContent=e.title;const why=document.createElement('div');why.className='why';why.textContent=e.detail;box.append(time,title,why);eventRoot.append(box)}
+ rows('memoryRows',[['Game RSS',fmt(d.memory.game_rss_mb,0)+' MB'],['Available RAM',fmt(d.memory.available_mb,0)+' MB'],['Swap free',fmt(d.memory.swap_free_mb,0)+' MB'],['Swap in',fmt(d.memory.swap_in_pages_per_s,0)+' pages/s'],['Swap out',fmt(d.memory.swap_out_pages_per_s,0)+' pages/s']]);
+ rows('thermalRows',[['CPU sensor',fmt(d.thermal.cpu_c)+' °C'],['GPU sensor',fmt(d.thermal.gpu_c)+' °C'],['Skin sensor',fmt(d.thermal.skin_c)+' °C'],['Battery',fmt(d.thermal.battery_c)+' °C']]);
+ rows('otherRows',[['FEX JIT',d.jit.status],['Context switches',fmt(d.cpu.context_switches_per_s,0)+' /s'],['GPU frequency','Unavailable on this device'],['Shader events','Use backend HUD/log if available'],['Detailed scheduling','Record a Perfetto trace']]);put('csv',d.csv_path);
+};
+function load(){const s=document.createElement('script');s.src='work/live-sessions/live-data.js?t='+Date.now();s.onload=()=>s.remove();s.onerror=()=>{s.remove();if(!latest)put('statusText','Waiting for sampler')};document.head.append(s)}
+load();setInterval(load,1500);setInterval(()=>{if(latest){const age=Date.now()-Date.parse(latest.generated_at);if(age>10000){$('status').className='status stale';put('statusText',`Paused · last sample ${Math.round(age/1000)}s ago`)}}},1000);
+window.addEventListener('resize',()=>{if(latest)window.renderProfileData(latest)});
+</script>
+</body>
+</html>
