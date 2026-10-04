@@ -1,3 +1,23 @@
+# Tyrantlator
+
+**Tyrant-4’s personal Bannerlator fork for profiling and performance tuning.**
+
+This repository belongs to [Tyrant-4](https://github.com/Tyrant-4). It is based on [Bannerlator by The412Banner](https://github.com/The412Banner/Bannerlator).
+
+## Planned first milestone
+
+- Monitor available performance data across Android, CPU/GPU, Wine/Proton, FEX/Box64, graphics translation, and display presentation.
+- Connect measurements to the PC performance dashboard, with clear labels for measured data and unavailable metrics.
+- Compare container configurations and improve performance based on recorded evidence.
+
+These custom profiling additions are planned and are not yet implemented in this fork. No custom Tyrantlator APK has been released yet.
+
+## Upstream Bannerlator documentation
+
+The documentation below is retained from the original project. Its release downloads, support links, and first-person statements refer to The412Banner’s upstream project. Original credits and license notices are preserved.
+
+---
+
 <p align="center">
   <img src="logo.jpg" width="820" alt="Bannerlator" />
 </p>
