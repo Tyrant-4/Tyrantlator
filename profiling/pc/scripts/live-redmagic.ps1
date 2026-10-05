@@ -10,6 +10,8 @@ param(
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
+. (Join-Path $PSScriptRoot 'read-process-family.ps1')
+$previousFamily=@{};$previousFamilyAt=$null
 $targetMs=1000.0/$TargetFps
 $adb=Join-Path $ProjectRoot 'platform-tools-latest-windows/platform-tools/adb.exe'
 # ADB writes its normal server-start notice to stderr. Windows PowerShell 5
@@ -155,6 +157,18 @@ case "$gamePid" in
   fi
   ;;
 esac
+echo FAMILY
+if [ -n "$gamePid" ]; then
+ gameUid=$(awk '/^Uid:/ {print $2; exit}' "/proc/$gamePid/status" 2>/dev/null)
+ case "$gameUid" in ''|*[!0-9]*) ;; *)
+ ps -A -o PID,PPID,UID,NAME | while read -r familyPid familyParent familyUid familyName; do
+  [ "$familyUid" = "$gameUid" ] || continue
+  echo "PF $familyPid $familyParent $familyUid $familyName"
+  cat "/proc/$familyPid/stat" 2>/dev/null
+  grep '^VmRSS:' "/proc/$familyPid/status" 2>/dev/null
+ done
+ ;; esac
+fi
 echo BACKEND
 if [ -n "$gamePid" ]; then
  grep -aioE 'dxvk|vkd3d|d3dvk|d8vk|wined3d' "/proc/$gamePid/maps" 2>/dev/null | sort -u
@@ -175,7 +189,7 @@ fi
 echo FEXJIT
 tail -n 80 /sdcard/Download/fex-jit.csv 2>/dev/null
 '@
-$shell=$shell.Replace('GAME_PLACEHOLDER',$GameProcess.ToLowerInvariant())
+$shell=$shell.Replace('GAME_PLACEHOLDER',$GameProcess.ToLowerInvariant()).Replace("`r",'')
 while((Get-Date) -lt $until){
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
  if($Package -eq 'auto' -and $surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
@@ -226,11 +240,13 @@ while((Get-Date) -lt $until){
  $gameMem='Unavailable';$gameMemMb=$null;$gameCpu='Unavailable';$gameCpuMsPerSec=$null;$ctx='Unavailable';$ctxRate=$null;$gamePid='Unavailable';$gameName='Unavailable';$ticks=$null;$switches=$null
  $wineNow=@{};$winePid=$null;$wineType=$null;$threadNow=@{};$threadId=$null;$threadType=$null
  $jitNow=@{};$backendSeen=@{}
+ $familyLines=New-Object 'System.Collections.Generic.List[string]'
  $appJson='';$deviceElapsedMs=0
  foreach($item in $raw){
   $line="${item}".Trim()
-  if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','BACKEND','THREADS','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
+  if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','FAMILY','BACKEND','THREADS','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
   switch($section){
+   FAMILY {[void]$familyLines.Add($line)}
    APPPROFILE {if($line.StartsWith('{')){$appJson=$line}}
    UPTIME {if($line -match '^([0-9]+(?:\.[0-9]+)?)\s'){$deviceElapsedMs=[double]::Parse($Matches[1],[cultureinfo]::InvariantCulture)*1000}}
    CPU {
@@ -333,7 +349,11 @@ while((Get-Date) -lt $until){
   $frameTime='New game detected; warming up';$frameRate='Warming up'
  }
  $appProfile=ConvertFrom-AppProfile -Json $appJson -Package $activePackage -DeviceElapsedMs $deviceElapsedMs
- $now=Get-Date;$cpuPerFrame='Waiting for surface updates';$gameCpuMsPerUpdate=$null;$jitMs=$null
+ $now=Get-Date
+ $familyElapsed=if($null -ne $previousFamilyAt){($now-$previousFamilyAt).TotalSeconds}else{0}
+ $family=ConvertFrom-ProcessFamily -Lines $familyLines.ToArray() -GamePid $gamePid -Previous $previousFamily -ElapsedSeconds $familyElapsed
+ $previousFamily=$family.previous;$previousFamilyAt=$now
+ $cpuPerFrame='Waiting for surface updates';$gameCpuMsPerUpdate=$null;$jitMs=$null
  if($null -ne $swapIn -and $null -ne $swapOut){
   if($previousSwap){
    $swapElapsed=($now-$previousSwap.at).TotalSeconds
@@ -514,6 +534,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
+  process_family=$family.rows
   assessment=$assessment;evidence=$evidence;next_check=$nextCheck
   surface=[pscustomobject]@{median_ms=$median;p95_ms=$p95;baseline_ms=$surfaceBaselineMs;updates=$newFrameCount;spikes_33=$spike33;spikes_50=$spike50;intervals_ms=@($timingHistory.ToArray())}
   cpu=[pscustomobject]@{game_ms_per_s=$gameCpuMsPerSec;game_ms_per_update=$gameCpuMsPerUpdate;peak_busy_percent=$cpuPeak;cores_over_90=$busyCoreCount;policy_drop_percent=$policyDrop;policy_cap_percent=$policyCap;cores=$coreRows;context_switches_per_s=$ctxRate}
@@ -528,7 +549,7 @@ while((Get-Date) -lt $until){
   $javascript='window.profileData='+$json+';if(window.renderProfileData){window.renderProfileData(window.profileData);}'
   [System.IO.File]::WriteAllText($DashboardDataPath,$javascript,(New-Object System.Text.UTF8Encoding($false)))
  }catch{Write-Warning "Live browser view could not update: $($_.Exception.Message)"}
- if($Host.Name -eq 'ConsoleHost'){Clear-Host}
+ if($Host.Name -eq 'ConsoleHost' -and -not [Console]::IsOutputRedirected){Clear-Host}
  Write-Host 'REDMAGIC / LIVE GAME PROFILE' -ForegroundColor Cyan
  Write-Host "$(Get-Date -Format 'HH:mm:ss')   Container $activePackage   Game $gameName (PID $gamePid)"
  Write-Host ('{0,-32} {1}' -f 'Graphics backend hints',$backendDisplay)

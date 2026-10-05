@@ -105,3 +105,9 @@ Earlier sections document the Sekiro/DXVK setup and example measurements; they a
 Run `deep-profile.cmd` while Assassin's Creed Origins is playing a repeatable scene. The default capture lasts 20 seconds and targets `ACOrigins.exe`. It adds a historical CPU scheduling panel to the existing dashboard with busy game threads, runnable CPU waits, and competing processes. Use `deep-profile.cmd -GameProcess sekiro.exe -Seconds 30` for another game. It does not change Vulkan settings or launch/stop games.
 
 Reports are saved under `work/deep-profiles/`. A missing game, absent scheduler data, trace data loss, and unfinished waits are reported explicitly. Thread CPU measurements are parts of game CPU work, not separate FEX/Wine/graphics layer totals or per-frame GPU time. No new APK is required.
+
+## Live learning and comparison tools
+
+The dashboard now includes a live game process family table: process/parent IDs, observed state, CPU core equivalents and resident memory. Parent ancestry identifies game descendants; processes that only share the game's Android UID are explicitly unconfirmed and can include other containers. CPU deltas require the same process start time, and zombie entries are not shown as active CPU work. No processes are stopped automatically.
+
+Expandable explanations describe frame timing, CPU/GPU activity, memory, thread states and heat. The live comparison continuously averages the latest 30 seconds of fresh collector readings. “Pin current baseline” holds a reference while live values continue updating; there is no timed recording workflow. Restart or frame-session changes reset the live averaging window. Missing measurements are excluded and counted; averaged rolling p95 readings are not a run-wide percentile. The baseline is stored locally when browser storage is available and can be exported. Historical deep CPU captures remain optional.
