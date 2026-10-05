@@ -38,7 +38,7 @@ $dashboardEvents=New-Object 'System.Collections.Generic.List[object]'
 $lastEvent=@{}
 $trackedGamePid=$null
 $allowedBaseline=@{}
-$surfaceLayer=$null; $activePackage='auto'; $lastFrameReady=[long]0
+$surfaceLayer=$null; $activePackage=$Package; $lastFrameReady=[long]0
 $staleSurfaceSamples=0
 $timingHistory=New-Object 'System.Collections.Generic.List[double]'
 if(-not $LogDirectory){$LogDirectory=Join-Path $ProjectRoot 'work\live-sessions'}
@@ -178,7 +178,7 @@ tail -n 80 /sdcard/Download/fex-jit.csv 2>/dev/null
 $shell=$shell.Replace('GAME_PLACEHOLDER',$GameProcess.ToLowerInvariant())
 while((Get-Date) -lt $until){
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
- if($surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
+ if($Package -eq 'auto' -and $surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
  $frameTime='Waiting for surface updates';$frameRate='Waiting for surface updates';$newFrameCount=0
  $median=$null;$p95=$null;$spike33=0;$spike50=0
  if($surfaceLayer){
@@ -197,7 +197,7 @@ while((Get-Date) -lt $until){
   if($fresh.Count -gt 0){$lastFrameReady=$fresh[-1]}
   if($fresh.Count -eq 0){$staleSurfaceSamples++}else{$staleSurfaceSamples=0}
   if($staleSurfaceSamples -ge 3){
-   $surfaceLayer=$null;$activePackage='auto';$lastFrameReady=[long]0;$staleSurfaceSamples=0;$timingHistory.Clear()
+   $surfaceLayer=$null;$lastFrameReady=[long]0;$staleSurfaceSamples=0;$timingHistory.Clear()
   }
   if($intervals.Count -ge 10){
    $sorted=@($intervals | Sort-Object)
@@ -213,7 +213,7 @@ while((Get-Date) -lt $until){
  $ErrorActionPreference='Continue'
  $appRead="`necho APPPROFILE`n"
  if($activePackage -match '^[A-Za-z0-9_.]+$' -and $activePackage -ne 'auto'){
-  $appRead+="cat /sdcard/Android/data/$activePackage/files/tyrantlator-profile.json 2>/dev/null`n"
+  $appRead+="cat /sdcard/Android/data/$activePackage/files/tyrantlator-profile.json 2>/dev/null`necho`n"
  }
  $appRead+="`necho UPTIME`ncat /proc/uptime`n"
  try{$raw=& $adb -s $Serial shell ($shell+$appRead) 2>&1;$adbExit=$LASTEXITCODE}
