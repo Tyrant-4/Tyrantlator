@@ -36,3 +36,7 @@ Run `powershell -NoProfile -File pc/tests/app-profile.Tests.ps1` to verify fresh
 ## Live dashboard learning tools
 
 The PC dashboard includes live process-family CPU/RAM/state readings, expandable plain-language explanations, and a live comparison against an optional pinned baseline. The live averages update over the latest 30 seconds without a timed recording. Missing data is excluded and valid sample counts are shown. Shared app UID does not prove a game relationship; descendant relationships are based on parent IDs. Process start time protects CPU deltas against PID reuse. Historical scheduling traces remain optional. Additional checks: `node pc/tests/dashboard-learning.test.js` and `pwsh -NoProfile -File pc/tests/process-family.Tests.ps1`.
+
+## Phone-wide live CPU candidates
+
+The live collector now samples the top 15 processes sorted by CPU and displays them on the same dashboard. Half a core of sustained sampled CPU outside the confirmed game family, host/display/system and profiler labels produces a review candidate after five seconds. Relationship labels are deliberately conservative; no automatic termination occurs. Gaps and game changes reset alert history, and paused readings are labeled. The list does not include every service or prove performance impact. Restart the existing live collector and refresh the dashboard; no APK update is needed. Verify with `pwsh -NoProfile -File pc/tests/background-cpu.Tests.ps1`.

@@ -28,3 +28,7 @@ assert.match(get('comparisonResults').children[1].textContent,/1 samples/);
 assert.equal(get('processFamily').children[0].children.length,2);
 now+=20000;context.window.renderProfileData({...d,generated_at:new Clock(now-20000).toISOString()});assert.match(get('comparisonStatus').textContent,/unavailable/);
 console.log('PASS: continuous live updates, baseline pinning, duplicate suppression, restart reset and stale rejection');
+context.window.renderProfileData({...d,generated_at:new Clock().toISOString(),background_cpu:{status:'Live test',processes:[{pid:99,name:'helper.exe',state:'Z',relation:'Unconfirmed',cpu_cores:2}],alerts:[{pid:99,name:'helper.exe',title:'Exited main thread with active CPU',cpu_cores:2,seconds:6,detail:'Check purpose'}]}});
+assert.equal(get('backgroundProcesses').children[0].children.length,2);
+assert.match(get('backgroundAlerts').children[0].children[0].textContent,/helper.exe/);
+console.log('PASS: live background table and alert rendering');

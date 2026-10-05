@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
 . (Join-Path $PSScriptRoot 'read-process-family.ps1')
+. (Join-Path $PSScriptRoot 'read-background-cpu.ps1')
+$previousBackground=@{}
 $previousFamily=@{};$previousFamilyAt=$null
 $targetMs=1000.0/$TargetFps
 $adb=Join-Path $ProjectRoot 'platform-tools-latest-windows/platform-tools/adb.exe'
@@ -186,6 +188,8 @@ if [ -n "$gamePid" ]; then
   esac
  done
 fi
+echo BACKGROUND
+top -b -n 1 -m 15 -s 5 -o PID,PPID,UID,S,%CPU,NAME 2>/dev/null
 echo FEXJIT
 tail -n 80 /sdcard/Download/fex-jit.csv 2>/dev/null
 '@
@@ -240,13 +244,15 @@ while((Get-Date) -lt $until){
  $gameMem='Unavailable';$gameMemMb=$null;$gameCpu='Unavailable';$gameCpuMsPerSec=$null;$ctx='Unavailable';$ctxRate=$null;$gamePid='Unavailable';$gameName='Unavailable';$ticks=$null;$switches=$null
  $wineNow=@{};$winePid=$null;$wineType=$null;$threadNow=@{};$threadId=$null;$threadType=$null
  $jitNow=@{};$backendSeen=@{}
+ $backgroundLines=New-Object 'System.Collections.Generic.List[string]'
  $familyLines=New-Object 'System.Collections.Generic.List[string]'
  $appJson='';$deviceElapsedMs=0
  foreach($item in $raw){
   $line="${item}".Trim()
-  if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','FAMILY','BACKEND','THREADS','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
+  if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','FAMILY','BACKEND','THREADS','BACKGROUND','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
   switch($section){
    FAMILY {[void]$familyLines.Add($line)}
+   BACKGROUND {[void]$backgroundLines.Add($line)}
    APPPROFILE {if($line.StartsWith('{')){$appJson=$line}}
    UPTIME {if($line -match '^([0-9]+(?:\.[0-9]+)?)\s'){$deviceElapsedMs=[double]::Parse($Matches[1],[cultureinfo]::InvariantCulture)*1000}}
    CPU {
@@ -343,7 +349,7 @@ while((Get-Date) -lt $until){
   }
  }
  if($gamePid -ne 'Unavailable' -and $gamePid -ne $trackedGamePid){
-  $trackedGamePid=$gamePid;$previousGame=$null;$previousThreads=@{};$previousWine=@{};$gpuRecent.Clear();$allowedBaseline=@{}
+  $trackedGamePid=$gamePid;$previousBackground=@{};$previousGame=$null;$previousThreads=@{};$previousWine=@{};$gpuRecent.Clear();$allowedBaseline=@{}
   $dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{};$timingHistory.Clear()
   $median=$null;$p95=$null;$newFrameCount=0;$spike33=0;$spike50=0
   $frameTime='New game detected; warming up';$frameRate='Warming up'
@@ -353,6 +359,8 @@ while((Get-Date) -lt $until){
  $familyElapsed=if($null -ne $previousFamilyAt){($now-$previousFamilyAt).TotalSeconds}else{0}
  $family=ConvertFrom-ProcessFamily -Lines $familyLines.ToArray() -GamePid $gamePid -Previous $previousFamily -ElapsedSeconds $familyElapsed
  $previousFamily=$family.previous;$previousFamilyAt=$now
+ $background=ConvertFrom-BackgroundCpu -Lines $backgroundLines.ToArray() -GamePid $gamePid -Package $activePackage -Family $family.rows -Previous $previousBackground -At $now
+ $previousBackground=$background.previous
  $cpuPerFrame='Waiting for surface updates';$gameCpuMsPerUpdate=$null;$jitMs=$null
  if($null -ne $swapIn -and $null -ne $swapOut){
   if($previousSwap){
@@ -504,7 +512,7 @@ while((Get-Date) -lt $until){
  $thermalText=if($null -ne $temps.cpu){'CPU {0:N1}C; GPU {1:N1}C; skin {2:N1}C; battery {3:N1}C' -f $temps.cpu,$temps.gpu,$temps.skin,$temps.battery}else{'Unavailable'}
  $record=[pscustomobject][ordered]@{
   time=$now.ToString('o');container_package=$activePackage;game_process=$gameName;game_pid=$gamePid;backend_indicators=$backendDisplay;surface_updates=$newFrameCount;surface_median_ms=$median;surface_p95_ms=$p95
-  app_profile_session=$appProfile.session;app_profile_game=$appProfile.game;app_hud_fps=$appProfile.fps;app_hud_p95_ms=$appProfile.p95_ms;app_profile_status=$appProfile.status
+  background_cpu_alerts=$background.alerts.Count;app_profile_session=$appProfile.session;app_profile_game=$appProfile.game;app_hud_fps=$appProfile.fps;app_hud_p95_ms=$appProfile.p95_ms;app_profile_status=$appProfile.status
   surface_baseline_ms=$surfaceBaselineMs;surface_slowdown=$surfaceSlowdown;target_fps=$TargetFps
   surface_over_33ms=$spike33;surface_over_50ms=$spike50;game_cpu_ms_per_s=$gameCpuMsPerSec
   gpu_busy_percent=$gpuValue;gpu_busy_recent_avg_percent=$gpuAverage;cpu_peak_busy_percent=$cpuPeak;cpu_cores_over_90_percent=$busyCoreCount
@@ -535,6 +543,7 @@ while((Get-Date) -lt $until){
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
   process_family=$family.rows
+  background_cpu=[pscustomobject]@{status=$background.status;processes=$background.processes;alerts=$background.alerts}
   assessment=$assessment;evidence=$evidence;next_check=$nextCheck
   surface=[pscustomobject]@{median_ms=$median;p95_ms=$p95;baseline_ms=$surfaceBaselineMs;updates=$newFrameCount;spikes_33=$spike33;spikes_50=$spike50;intervals_ms=@($timingHistory.ToArray())}
   cpu=[pscustomobject]@{game_ms_per_s=$gameCpuMsPerSec;game_ms_per_update=$gameCpuMsPerUpdate;peak_busy_percent=$cpuPeak;cores_over_90=$busyCoreCount;policy_drop_percent=$policyDrop;policy_cap_percent=$policyCap;cores=$coreRows;context_switches_per_s=$ctxRate}

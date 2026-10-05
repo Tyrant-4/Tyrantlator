@@ -35,6 +35,14 @@ function pin(){
  if(!current||Date.now()-Date.parse(current.generated_at)>10000||!runs.B||recent.length<5||runs.B.duration<5){message('Need at least five fresh live samples spanning five seconds to pin a useful baseline. Live monitoring continues.');return}
  runs.A={...runs.B,label:$('runLabel').value.trim().slice(0,80)||'Pinned settings',samples:recent.slice()};save();render();message(`Baseline pinned. Live readings keep updating.${storage?' Saved in this browser.':' Export to keep this baseline.'}`)
 }
+function background(d){
+ const data=d.background_cpu||{},root=$('backgroundProcesses'),alerts=$('backgroundAlerts');root.replaceChildren();alerts.replaceChildren();$('backgroundStatus').textContent=data.status||'Phone-wide readings unavailable. Start the updated live collector.';
+ for(const a of data.alerts||[]){const box=doc.createElement('div');box.className='event';const title=doc.createElement('b'),detail=doc.createElement('p');title.textContent=`${a.title}: ${a.name} (${a.pid})`;detail.className='detail';detail.textContent=`${a.cpu_cores.toFixed(2)} busy cores · observed for ${a.seconds} s. ${a.detail}`;box.append(title,detail);alerts.append(box)}
+ if(!(data.alerts||[]).length){const p=doc.createElement('p');p.className='detail';p.textContent=(data.processes||[]).length?'No sustained candidate detected in this sample. This does not prove all background activity is harmless.':'Alerts unavailable without a process sample.';alerts.append(p)}
+ const list=data.processes||[];if(!list.length){root.textContent='Process source unavailable.';return}
+ const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Process / PID','Relationship','CPU cores','State']){const th=doc.createElement('th');th.textContent=label;head.append(th)}table.append(head);
+ for(const p of list){const tr=doc.createElement('tr');for(const text of [`${p.name} (${p.pid})`,p.relation,Number(p.cpu_cores).toFixed(2),p.state==='Z'?'Leader exited; threads may remain':p.state]){const td=doc.createElement('td');td.textContent=text;tr.append(td)}table.append(tr)}root.append(table)
+}
 function family(d){const root=$('processFamily');root.replaceChildren();const list=d.process_family||[];if(!list.length){root.textContent='No process family available. Start a game with the updated live collector.';return}
  const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Process / PID','Relationship','State','CPU cores','RAM MB','Parent PID']){const cell=doc.createElement('th');cell.textContent=label;head.append(cell)}table.append(head);
  const states={R:'Running or ready',S:'Sleeping',D:'Blocked wait',Z:'Leader exited; threads may remain',T:'Stopped',t:'Tracing stop'};
@@ -43,6 +51,6 @@ function family(d){const root=$('processFamily');root.replaceChildren();const li
 $('pinBaseline').onclick=pin;
 $('clearComparisons').onclick=()=>{runs.A=null;save();render();message('Baseline cleared. Live monitoring continues.')};
 $('exportComparisons').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,...runs},null,2)],{type:'application/json'}));const a=doc.createElement('a');a.href=url;a.download='tyrantlator-live-comparison.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-setInterval(()=>{if(current&&Date.now()-Date.parse(current.generated_at)>10000){runs.B=null;render();message('Collector paused. Live comparison unavailable; pinned baseline kept.')}},1000);
-const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);accept(d)};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
+setInterval(()=>{if(current&&Date.now()-Date.parse(current.generated_at)>10000){runs.B=null;render();$('backgroundStatus').textContent='Paused · these process readings are from the last sample, not live.';message('Collector paused. Live comparison unavailable; pinned baseline kept.')}},1000);
+const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);background(d);accept(d)};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
 })(typeof window==='undefined'?globalThis:window);
