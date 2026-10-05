@@ -17,3 +17,7 @@ if($null -ne $c.rows[0].cpu_cores){throw 'Reused PID inherited old CPU ticks'}
 $e=ConvertFrom-ProcessFamily -Lines @() -GamePid Unavailable
 if($e.rows.Count -ne 0){throw 'Missing game should have no family'}
 'PASS: process ancestry, CPU deltas, PID reuse, zombies and missing process'
+$missing=ConvertFrom-ProcessFamily -Lines @('PF 40 1 10001 game.exe') -GamePid 40
+if($missing.rows[0].cpu_status -notmatch '^Unavailable'){throw 'Missing counters shown as warmup'}
+if($a.rows[0].cpu_status -notmatch '^Warming'){throw 'First sample not distinguished from read failure'}
+'PASS: unavailable counters distinguished from initial warmup'

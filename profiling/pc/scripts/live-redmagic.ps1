@@ -165,7 +165,7 @@ if [ -n "$gamePid" ]; then
  case "$gameUid" in ''|*[!0-9]*) ;; *)
  ps -A -o PID,PPID,UID,NAME | while read -r familyPid familyParent familyUid familyName; do
   [ "$familyUid" = "$gameUid" ] || continue
-  echo "PF $familyPid $familyParent $familyUid $familyName"
+  printf '%s\n' "PF $familyPid $familyParent $familyUid $familyName"
   cat "/proc/$familyPid/stat" 2>/dev/null
   grep '^VmRSS:' "/proc/$familyPid/status" 2>/dev/null
  done

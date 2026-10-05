@@ -14,12 +14,12 @@ function ConvertFrom-ProcessFamily {
   if(-not $added){break}
  }
  $rows=@(foreach($id in $found.Keys){
-  $p=$found[$id];$cores=$null
+  $p=$found[$id];$cores=$null;$cpuStatus=if($null -eq $p.ticks){'Unavailable: process counters could not be read'}else{'Warming up: needs two samples from the same process'}
   if($null -ne $p.ticks -and $ElapsedSeconds -gt 0 -and $Previous.ContainsKey($id) -and $Previous[$id].start -eq $p.start -and $null -ne $Previous[$id].ticks){
-   $delta=$p.ticks-$Previous[$id].ticks;if($delta -ge 0){$cores=[math]::Round($delta/$TicksPerSecond/$ElapsedSeconds,2)}
+   $delta=$p.ticks-$Previous[$id].ticks;if($delta -ge 0){$cores=[math]::Round($delta/$TicksPerSecond/$ElapsedSeconds,2);$cpuStatus='Measured between live samples'}else{$cpuStatus='Unavailable: CPU counter reset'}
   }
   $relation=if($id -eq $GamePid){'Selected game'}elseif($descendants.ContainsKey($id)){'Game descendant'}else{'Same app account; relationship unconfirmed'}
-  [pscustomobject]@{pid=$p.pid;ppid=$p.ppid;name=$p.name;state=$p.state;rss_mb=$p.rss;cpu_cores=$cores;relation=$relation}
+  [pscustomobject]@{pid=$p.pid;ppid=$p.ppid;name=$p.name;state=$p.state;rss_mb=$p.rss;cpu_cores=$cores;cpu_status=$cpuStatus;relation=$relation}
  })
  [pscustomobject]@{rows=@($rows | Sort-Object @{Expression={if($_.relation -eq 'Selected game'){0}else{1}}},@{Expression={$_.cpu_cores};Descending=$true});previous=$found}
 }
