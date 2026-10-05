@@ -1,4 +1,4 @@
-param(
+﻿param(
  [ValidateRange(1,21600)][int]$Seconds=3600,
  [ValidatePattern('^[A-Za-z0-9_.]+$')][string]$Package='auto',
  [ValidatePattern('^[A-Za-z0-9_.-]+$')][string]$GameProcess='auto',
@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
 . (Join-Path $PSScriptRoot 'read-process-family.ps1')
+. (Join-Path $PSScriptRoot 'read-game-threads.ps1')
+$previousAllThreads=@{};$previousThreadsAt=$null
 . (Join-Path $PSScriptRoot 'read-background-cpu.ps1')
 $previousBackground=@{}
 $previousFamily=@{};$previousFamilyAt=$null
@@ -32,8 +34,6 @@ if($adbProcess.ExitCode -ne 0 -or $state -ne 'device'){
  throw "Phone is not connected or authorized: $state $adbError"
 }
 $previousCpu=@{}; $previousGame=$null
-$previousWine=@{}
-$previousThreads=@{}
 $previousJit=@{}
 $previousSwap=$null
 $gpuRecent=New-Object 'System.Collections.Generic.List[double]'
@@ -122,11 +122,6 @@ for zone in /sys/class/thermal/thermal_zone*; do
    ;;
  esac
 done
-echo WINE
-ps -A -o PID,NAME | grep -Ei 'wineserver$|winedevice\.exe$' | while read winePid wineName; do
- echo "PID $winePid $wineName"
- cat /proc/$winePid/stat 2>/dev/null
-done
 echo GAME
 gamePid=''
 gameName=''
@@ -177,16 +172,7 @@ if [ -n "$gamePid" ]; then
 fi
 echo THREADS
 if [ -n "$gamePid" ]; then
- for commFile in /proc/$gamePid/task/*/comm; do
-  read threadName < "$commFile" 2>/dev/null || continue
-  case "$threadName" in
-   dxvk-*|vkd3d*|d3dvk*|d8vk*|wine_*)
-    threadDir=${commFile%/comm}
-    echo "TID ${threadDir##*/} $threadName"
-    cat "$threadDir/stat" 2>/dev/null
-    ;;
-  esac
- done
+ cat /proc/$gamePid/task/*/stat 2>/dev/null
 fi
 echo BACKGROUND
 top -b -n 1 -m 15 -s 5 -o PID,PPID,UID,S,%CPU,NAME 2>/dev/null
@@ -258,6 +244,7 @@ while((Get-Date) -lt $until){
  $gameMem='Unavailable';$gameMemMb=$null;$gameCpu='Unavailable';$gameCpuMsPerSec=$null;$ctx='Unavailable';$ctxRate=$null;$gamePid='Unavailable';$gameName='Unavailable';$ticks=$null;$switches=$null
  $wineNow=@{};$winePid=$null;$wineType=$null;$threadNow=@{};$threadId=$null;$threadType=$null
  $jitNow=@{};$backendSeen=@{}
+ $allThreadLines=New-Object 'System.Collections.Generic.List[string]'
  $backgroundLines=New-Object 'System.Collections.Generic.List[string]'
  $familyLines=New-Object 'System.Collections.Generic.List[string]'
  $appJson='';$deviceElapsedMs=0
@@ -314,17 +301,6 @@ while((Get-Date) -lt $until){
      if($kind -and ($null -eq $temps[$kind] -or $temperature -gt $temps[$kind])){$temps[$kind]=$temperature}
     }
    }
-   WINE {
-    if($line -match '^PID (\d+) (.+)$'){
-     $winePid=$Matches[1]
-     $wineType=if($Matches[2] -match '(?i)wineserver$'){'server'}else{'device'}
-    }
-    if($winePid -and $line -match '^\d+ \(.+\) [A-Z] (.+)$'){
-     $fields=$Matches[1] -split '\s+'
-     if($fields.Count -gt 11){$wineNow[$winePid]=@{ticks=([double]$fields[10]+[double]$fields[11]);type=$wineType}}
-     $winePid=$null
-    }
-   }
    GAME {
     if($line -match '^PID (\d+) (.+)$'){$gamePid=$Matches[1];$gameName=$Matches[2]}
     # /proc/<pid>/stat uses 100 CPU ticks per second on this phone.
@@ -339,18 +315,7 @@ while((Get-Date) -lt $until){
    BACKEND {
     if($line -match '^(?i:dxvk|vkd3d|d3dvk|d8vk|wined3d)$'){$backendSeen[$line.ToUpperInvariant()]=$true}
    }
-   THREADS {
-    if($line -match '^TID (\d+) (.+)$'){
-     $threadId=$Matches[1]
-     $name=$Matches[2]
-     $threadType=if($name -match '^dxvk-shader-'){'shader'}elseif($name -eq 'dxvk-submit' -or $name -eq 'dxvk-queue'){'submit'}elseif($name -match '^dxvk-'){'dxvkOther'}elseif($name -match '^(vkd3d|d3dvk)'){'vkd3d'}elseif($name -match '^d8vk'){'d8vk'}else{'wineInGame'}
-    }
-    if($threadId -and $line -match '^\d+ \(.+\) [A-Z] (.+)$'){
-     $fields=$Matches[1] -split '\s+'
-     if($fields.Count -gt 11){$threadNow[$threadId]=@{ticks=([double]$fields[10]+[double]$fields[11]);type=$threadType}}
-     $threadId=$null
-    }
-   }
+   THREADS {[void]$allThreadLines.Add($line)}
    FEXJIT {
     if($line -match '^(\d+),(\d+),(\d+),(\d+)$'){
      $pidKey=$Matches[1]
@@ -363,7 +328,7 @@ while((Get-Date) -lt $until){
   }
  }
  if($gamePid -ne 'Unavailable' -and $gamePid -ne $trackedGamePid){
-  $trackedGamePid=$gamePid;$previousBackground=@{};$previousGame=$null;$previousThreads=@{};$previousWine=@{};$gpuRecent.Clear();$allowedBaseline=@{}
+  $trackedGamePid=$gamePid;$previousAllThreads=@{};$previousThreadsAt=$null;$previousBackground=@{};$previousGame=$null;$gpuRecent.Clear();$allowedBaseline=@{}
   $dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{};$timingHistory.Clear()
   $median=$null;$p95=$null;$newFrameCount=0;$spike33=0;$spike50=0
   $frameTime='New game detected; warming up';$frameRate='Warming up'
@@ -375,7 +340,7 @@ while((Get-Date) -lt $until){
  $previousFamily=$family.previous;$previousFamilyAt=$now
  $background=ConvertFrom-BackgroundCpu -Lines $backgroundLines.ToArray() -GamePid $gamePid -Package $activePackage -Family $family.rows -Previous $previousBackground -At $now
  $previousBackground=$background.previous
- $cpuPerFrame='Waiting for surface updates';$gameCpuMsPerUpdate=$null;$jitMs=$null
+ $cpuWork=if($gamePid -eq 'Unavailable'){'Waiting for game process'}else{'Warming up: needs two live samples'};$gameCpuMsPerUpdate=$null;$jitMs=$null
  if($null -ne $swapIn -and $null -ne $swapOut){
   if($previousSwap){
    $swapElapsed=($now-$previousSwap.at).TotalSeconds
@@ -408,50 +373,34 @@ while((Get-Date) -lt $until){
    if($coreIndex -eq 6 -and $coreIndex -lt $hardwareFreq.Count -and $hardwareFreq[$coreIndex] -gt 0){$policyCap=100.0*$allowedFreq[$coreIndex]/$hardwareFreq[$coreIndex]}
   }
  }
- $hasWineDelta=$previousWine.Count -gt 0
- $wineServerMs=0.0;$wineDeviceMs=0.0
- foreach($id in $wineNow.Keys){
-  if($previousWine.ContainsKey($id)){
-   $delta=10*($wineNow[$id].ticks-$previousWine[$id].ticks)
-   if($delta -ge 0){if($wineNow[$id].type -eq 'server'){$wineServerMs+=$delta}else{$wineDeviceMs+=$delta}}
-  }
- }
- $previousWine=$wineNow
- $hasThreadDelta=$previousThreads.Count -gt 0
- $threadMs=@{shader=0.0;submit=0.0;dxvkOther=0.0;vkd3d=0.0;d8vk=0.0;wineInGame=0.0}
- foreach($id in $threadNow.Keys){
-  if($previousThreads.ContainsKey($id)){
-   $delta=10*($threadNow[$id].ticks-$previousThreads[$id].ticks)
-   if($delta -ge 0){$threadMs[$threadNow[$id].type]+=$delta}
-  }
- }
- $previousThreads=$threadNow
+ $threadElapsed=if($null -ne $previousThreadsAt){($now-$previousThreadsAt).TotalSeconds}else{0}
+ $gameThreads=ConvertFrom-GameThreads -Lines $allThreadLines.ToArray() -Previous $previousAllThreads -ElapsedSeconds $threadElapsed
+ $previousAllThreads=$gameThreads.previous;$previousThreadsAt=$now
+ $threadNow=$gameThreads.previous
  foreach($thread in $threadNow.Values){
   if($thread.type -in @('shader','submit','dxvkOther')){$backendSeen['DXVK']=$true}
   elseif($thread.type -eq 'vkd3d'){$backendSeen['VKD3D']=$true}
   elseif($thread.type -eq 'd8vk'){$backendSeen['D8VK']=$true}
  }
  $backendDisplay=if($backendSeen.Count -gt 0){(@($backendSeen.Keys | Sort-Object) -join ', ')+' indicators'}else{'Unknown; no loaded-library/thread marker'}
- $threadTypes=@($threadNow.Values | ForEach-Object {$_.type})
- $wineHelpers='Waiting for surface updates'
- $dxvkWorkers='No named worker seen';$shaderWorkers='No named worker seen';$submitWorkers='No named worker seen';$vkd3dWorkers='No named worker seen';$d8vkWorkers='No named worker seen';$wineInGameWorkers='No named worker seen'
- if($newFrameCount -gt 0 -and $wineNow.Count -gt 0 -and $hasWineDelta){
-  $wineHelpers=('{0:N2} ms/update wineserver; {1:N2} ms/update winedevice' -f ($wineServerMs/$newFrameCount),($wineDeviceMs/$newFrameCount))
+ $workerRates=@{}
+ foreach($type in $gameThreads.groups.Keys){
+  $group=$gameThreads.groups[$type]
+  $workerRates[$type]=Format-CpuWork -MsPerSecond $group.cpu_ms_per_s -Status $group.status
+  if($null -ne $group.cpu_ms_per_s){$workerRates[$type]+=" · $($group.status)"}
  }
- if($newFrameCount -gt 0 -and $threadNow.Count -gt 0 -and $hasThreadDelta){
-  if($threadTypes -contains 'shader'){$shaderWorkers=('{0:N2} ms CPU/update (DXVK shader threads)' -f ($threadMs.shader/$newFrameCount))}
-  if($threadTypes -contains 'submit'){$submitWorkers=('{0:N2} ms CPU/update (DXVK queue + submit threads)' -f ($threadMs.submit/$newFrameCount))}
-  if($threadTypes -contains 'dxvkOther'){$dxvkWorkers=('{0:N2} ms CPU/update (other named DXVK threads)' -f ($threadMs.dxvkOther/$newFrameCount))}
-  if($threadTypes -contains 'vkd3d'){$vkd3dWorkers=('{0:N2} ms CPU/update (named VKD3D/D3DVK threads)' -f ($threadMs.vkd3d/$newFrameCount))}
-  if($threadTypes -contains 'd8vk'){$d8vkWorkers=('{0:N2} ms CPU/update (named D8VK threads)' -f ($threadMs.d8vk/$newFrameCount))}
-  if($threadTypes -contains 'wineInGame'){$wineInGameWorkers=('{0:N2} ms CPU/update (named Wine threads only)' -f ($threadMs.wineInGame/$newFrameCount))}
- }
+ $shaderWorkers=$workerRates.shader;$submitWorkers=$workerRates.submit;$dxvkWorkers=$workerRates.dxvkOther
+ $vkd3dWorkers=$workerRates.vkd3d;$d8vkWorkers=$workerRates.d8vk;$wineInGameWorkers=$workerRates.wineInGame
+ $helpers=@($family.rows | Where-Object {$_.name -match '(?i)(wineserver|winedevice\.exe)$'})
+ $measuredHelpers=@($helpers | Where-Object {$null -ne $_.cpu_cores})
+ $wineHelpers=if(-not $helpers.Count){'No Wine helper seen'}elseif(-not $measuredHelpers.Count){'Warming up: needs two helper samples'}else{Format-CpuWork -MsPerSecond (1000*($measuredHelpers | Measure-Object cpu_cores -Sum).Sum)}
+ if($measuredHelpers.Count){$wineHelpers+=" · $($measuredHelpers.Count)/$($helpers.Count) helpers measured (shared app account)"}
+ $selectedGame=@($family.rows | Where-Object relation -eq 'Selected game')
+ if($selectedGame.Count -and $null -ne $selectedGame[0].cpu_cores){$gameCpuMsPerSec=1000*$selectedGame[0].cpu_cores;$gameCpu=Format-CpuWork $gameCpuMsPerSec;$cpuWork=$gameCpu}
  if($null -ne $ticks -and $previousGame -and $gamePid -eq $previousGame.pid){
   $elapsed=($now-$previousGame.at).TotalSeconds
   if($elapsed -gt 0){
-   $gameCpuMsPerSec=10*($ticks-$previousGame.ticks)/$elapsed
-   $gameCpu=('{0:N0} ms/s = {1:N2} core-equivalents' -f $gameCpuMsPerSec,($gameCpuMsPerSec/1000))
-   if($newFrameCount -gt 0){$gameCpuMsPerUpdate=10*($ticks-$previousGame.ticks)/$newFrameCount;$cpuPerFrame=('{0:N1} ms CPU/update (entire game process)' -f $gameCpuMsPerUpdate)}
+   if($newFrameCount -gt 0){$gameCpuMsPerUpdate=10*($ticks-$previousGame.ticks)/$newFrameCount}
    if($null -ne $switches){$ctxRate=($switches-$previousGame.switches)/$elapsed;$ctx="$([math]::Round($ctxRate)) /s (game main task)"}
   }
  }
@@ -528,6 +477,7 @@ while((Get-Date) -lt $until){
   time=$now.ToString('o');container_package=$activePackage;game_process=$gameName;game_pid=$gamePid;backend_indicators=$backendDisplay;surface_updates=$newFrameCount;surface_median_ms=$median;surface_p95_ms=$p95
   background_cpu_alerts=$background.alerts.Count;app_profile_session=$appProfile.session;app_profile_game=$appProfile.game;app_hud_fps=$appProfile.fps;app_hud_p95_ms=$appProfile.p95_ms;app_profile_status=$appProfile.status
   surface_baseline_ms=$surfaceBaselineMs;surface_slowdown=$surfaceSlowdown;target_fps=$TargetFps
+  dxvk_shader_cpu_ms_per_s=$gameThreads.groups.shader.cpu_ms_per_s;dxvk_submit_cpu_ms_per_s=$gameThreads.groups.submit.cpu_ms_per_s;dxvk_other_cpu_ms_per_s=$gameThreads.groups.dxvkOther.cpu_ms_per_s;game_thread_count=$gameThreads.rows.Count
   surface_over_33ms=$spike33;surface_over_50ms=$spike50;game_cpu_ms_per_s=$gameCpuMsPerSec
   gpu_busy_percent=$gpuValue;gpu_busy_recent_avg_percent=$gpuAverage;cpu_peak_busy_percent=$cpuPeak;cpu_cores_over_90_percent=$busyCoreCount
   fex_jit_new_ms=$jitMs;fex_jit_total_ms=$totalJitMs;game_rss_mb=$gameMemMb;mem_available_mb=$memMb
@@ -540,7 +490,7 @@ while((Get-Date) -lt $until){
  $coreRows=@(for($coreIndex=0;$coreIndex -lt 8;$coreIndex++){
   [pscustomobject]@{index=$coreIndex;busy_percent=$(if($cores.ContainsKey($coreIndex)){$cores[$coreIndex]}else{$null});current_mhz=$(if($coreIndex -lt $freq.Count){$freq[$coreIndex]}else{$null});allowed_mhz=$(if($coreIndex -lt $allowedFreq.Count){$allowedFreq[$coreIndex]}else{$null})}
  })
- $layerRows=@([pscustomobject]@{name='Whole game CPU';value=$cpuPerFrame})
+ $layerRows=@([pscustomobject]@{name='Whole game CPU';value=$cpuWork})
  $layerRows+=([pscustomobject]@{name='Wine helpers';value=$wineHelpers})
  if($backendSeen.ContainsKey('DXVK')){
   $layerRows+=([pscustomobject]@{name='DXVK shader workers';value=$shaderWorkers})
@@ -556,6 +506,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
+  game_threads=[pscustomobject]@{total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
   background_cpu=[pscustomobject]@{status=$background.status;processes=$background.processes;alerts=$background.alerts}
   assessment=$assessment;evidence=$evidence;next_check=$nextCheck
@@ -587,7 +538,7 @@ while((Get-Date) -lt $until){
  Write-Host ('{0,-32} {1}' -f 'Surface spikes',"$spike33 over 33 ms; $spike50 over 50 ms (this sample)")
  Show-TimingGraph
  Write-Host ''
- Write-Host ('{0,-32} {1}' -f 'Whole-game CPU work',$cpuPerFrame)
+ Write-Host ('{0,-32} {1}' -f 'Whole-game CPU work',$cpuWork)
  Write-Host ('{0,-32} {1}' -f 'Wine helper CPU work',$wineHelpers)
  if($backendSeen.ContainsKey('DXVK')){
   Write-Host ('{0,-32} {1}' -f 'DXVK shader CPU work',$shaderWorkers)

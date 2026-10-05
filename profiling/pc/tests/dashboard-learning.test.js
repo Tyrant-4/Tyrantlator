@@ -32,3 +32,9 @@ context.window.renderProfileData({...d,generated_at:new Clock().toISOString(),ba
 assert.equal(get('backgroundProcesses').children[0].children.length,2);
 assert.match(get('backgroundAlerts').children[0].children[0].textContent,/helper.exe/);
 console.log('PASS: live background table and alert rendering');
+context.window.renderProfileData({...d,generated_at:new Clock().toISOString(),game_threads:{status:'Live test',total:2,measured:1,rows:[{tid:10,name:'dxvk-submit',role:'DXVK submission worker',cpu_ms_per_s:500,cpu_percent:50,cpu_cores:.5,state:'S',last_core:6,status:'Measured'},{tid:11,name:'new worker',role:'Unknown',cpu_ms_per_s:null,state:'R',last_core:2,status:'Warming up'}]}});
+assert.equal(get('gameThreadRows').children[0].children.length,3);
+assert.match(get('gameThreadStatus').textContent,/showing 2\/2/);
+assert.equal(get('gameThreadRows').children[0].children[1].children[2].textContent,'50.0');
+assert.equal(get('gameThreadRows').children[0].children[1].children[6].textContent,'C6');
+console.log('PASS: live thread display, CPU units, partial samples and last-core label');

@@ -40,3 +40,7 @@ The PC dashboard includes live process-family CPU/RAM/state readings, expandable
 ## Phone-wide live CPU candidates
 
 The live collector now samples the top 15 processes sorted by CPU and displays them on the same dashboard. Half a core of sustained sampled CPU outside the confirmed game family, host/display/system and profiler labels produces a review candidate after five seconds. Relationship labels are deliberately conservative; no automatic termination occurs. Gaps and game changes reset alert history, and paused readings are labeled. The list does not include every service or prove performance impact. Restart the existing live collector and refresh the dashboard; no APK update is needed. Verify with `pwsh -NoProfile -File pc/tests/background-cpu.Tests.ps1`.
+
+## Live game threads and CPU units
+
+Whole-game and named-worker CPU now use busy cores and CPU ms/s, independent of compositor updates. One busy core equals 1,000 CPU ms/s. Worker coverage is reported; warmup is distinct from measured idle. The live thread table shows the busiest 20 readable game threads with observed states, last CPU and roles inferred from names. Start times protect TID reuse; state/core do not measure wait duration or affinity. CSVs include named DXVK worker CPU rates and thread counts. Check `powershell -NoProfile -ExecutionPolicy Bypass -File pc/tests/game-threads.Tests.ps1`. No new APK is needed.
