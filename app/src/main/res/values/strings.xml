@@ -4,7 +4,8 @@
     <!ENTITY TERMUX_X11_APP_NAME "Winlator:X11">
     ]>
 <resources>
-    <string name="app_name">Bannerlator Bionic</string>
+    <string name="app_name">Tyrantlator</string>
+    <string name="tyrantlator_build_identity">Tyrantlator · Profiling build 2\nTyrant-4 fork · Based on Bannerlator 3.1.5</string>
     <string name="run">Run</string>
     <string name="edit">Edit</string>
     <string name="remove">Remove</string>
