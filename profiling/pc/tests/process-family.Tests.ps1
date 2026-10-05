@@ -9,7 +9,9 @@ $b=ConvertFrom-ProcessFamily -Lines ($lines -replace ' 100 0 ',' 200 0 ') -GameP
 if(($b.rows | Where-Object pid -eq 10).cpu_cores -ne .5){throw 'CPU delta incorrect'}
 if(($b.rows | Where-Object pid -eq 11).relation -ne 'Game descendant'){throw 'Descendant relation incorrect'}
 if(($b.rows | Where-Object pid -eq 12).relation -notmatch 'unconfirmed'){throw 'Shared UID wrongly treated as game family'}
-if($null -ne ($b.rows | Where-Object pid -eq 13).cpu_cores){throw 'Zombie counted as active CPU'}
+if(($b.rows | Where-Object pid -eq 13).cpu_cores -ne 0){throw 'Unchanged zombie ticks should report zero'}
+$z=ConvertFrom-ProcessFamily -Lines ($lines -replace ' 500 0 ',' 900 0 ') -GamePid 10 -Previous $a.previous -ElapsedSeconds 2
+if(($z.rows | Where-Object pid -eq 13).cpu_cores -ne 2){throw 'Exited leader hid live thread-group CPU'}
 $c=ConvertFrom-ProcessFamily -Lines @('PF 10 1 10001 ACOrigins.exe',(Stat 10 1 900 999)) -GamePid 10 -Previous $a.previous -ElapsedSeconds 2
 if($null -ne $c.rows[0].cpu_cores){throw 'Reused PID inherited old CPU ticks'}
 $e=ConvertFrom-ProcessFamily -Lines @() -GamePid Unavailable

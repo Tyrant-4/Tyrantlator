@@ -37,7 +37,7 @@ function pin(){
 }
 function family(d){const root=$('processFamily');root.replaceChildren();const list=d.process_family||[];if(!list.length){root.textContent='No process family available. Start a game with the updated live collector.';return}
  const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Process / PID','Relationship','State','CPU cores','RAM MB','Parent PID']){const cell=doc.createElement('th');cell.textContent=label;head.append(cell)}table.append(head);
- const states={R:'Running or ready',S:'Sleeping',D:'Blocked wait',Z:'Exited (zombie)',T:'Stopped',t:'Tracing stop'};
+ const states={R:'Running or ready',S:'Sleeping',D:'Blocked wait',Z:'Leader exited; threads may remain',T:'Stopped',t:'Tracing stop'};
  for(const p of list){const tr=doc.createElement('tr');for(const text of [`${p.name} (${p.pid})`,p.relation,states[p.state]||p.state,p.cpu_cores===null?'Warming up / unavailable':Number(p.cpu_cores).toFixed(2),p.rss_mb===null?'Unavailable':p.rss_mb,p.ppid]){const td=doc.createElement('td');td.textContent=text;tr.append(td)}table.append(tr)}root.append(table)
 }
 $('pinBaseline').onclick=pin;

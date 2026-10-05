@@ -15,7 +15,7 @@ function ConvertFrom-ProcessFamily {
  }
  $rows=@(foreach($id in $found.Keys){
   $p=$found[$id];$cores=$null
-  if($p.state -ne 'Z' -and $null -ne $p.ticks -and $ElapsedSeconds -gt 0 -and $Previous.ContainsKey($id) -and $Previous[$id].start -eq $p.start -and $null -ne $Previous[$id].ticks){
+  if($null -ne $p.ticks -and $ElapsedSeconds -gt 0 -and $Previous.ContainsKey($id) -and $Previous[$id].start -eq $p.start -and $null -ne $Previous[$id].ticks){
    $delta=$p.ticks-$Previous[$id].ticks;if($delta -ge 0){$cores=[math]::Round($delta/$TicksPerSecond/$ElapsedSeconds,2)}
   }
   $relation=if($id -eq $GamePid){'Selected game'}elseif($descendants.ContainsKey($id)){'Game descendant'}else{'Same app account; relationship unconfirmed'}
