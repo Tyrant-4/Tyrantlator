@@ -19,6 +19,14 @@ Intervals inherit the HUD's millisecond clock and pause filtering. They describe
 
 Exact total FEX/Box64, Wine/Proton, DXVK/VKD3D, Vulkan/Turnip and GPU execution milliseconds remain unavailable. Next phases should instrument native components with timestamped spans and an accessible GPU timer, then align their clocks. Do not add named-worker CPU or JIT work to frame intervals.
 
+## Deep CPU scheduling capture
+
+Run `deep-profile.cmd` in the existing PC workspace while playing a repeatable scene. It records 20 seconds through the existing Perfetto capture script, then adds a historical capture panel to the same dashboard. Use `deep-profile.cmd -GameProcess sekiro.exe -Seconds 30` for another game. The default target is `ACOrigins.exe`; it never launches or stops the game.
+
+The panel shows the busiest game threads, CPU milliseconds and percent of capture wall time, runnable wait totals and p95/max completed wait episodes, and other processes competing for CPU. Trace data loss and unfinished waits are reported; unfinished wait records are excluded from wait measurements. A missing game or scheduler source is explicitly unavailable. Captures are labeled with their saved time and selected process, independent of current live measurements. Thread names indicate work but do not prove total FEX, Wine or graphics-layer overhead. Capture averages do not identify which individual frame was delayed.
+
+Reanalyze an existing trace with PowerShell 7: `scripts/deep-profile.ps1 -RunDir <capture-folder> -GameProcess ACOrigins.exe`. JSON and thread CSV reports are saved beside the trace. The existing workspace uses `tools/perfetto/trace_processor_shell.exe`; a PC copy needs that Perfetto tool and the ADB path described below. This enhancement does not require a new Android APK.
+
 ## PC sources and checks
 
 `pc/` contains the existing Windows dashboard and collector with this additive integration. In the current workspace, canonical files remain at `C:\Android-PC-Emulator\dashboard.html` and `scripts/`; do not maintain a second live instance. The fork copy versions those sources together with the Android change. Copy the `pc/` files into a workspace containing `platform-tools-latest-windows/platform-tools/adb.exe`; pass `-Serial <device>` if needed. Historical `PROFILING.md` refers to additional tools already installed in the original workspace.
