@@ -860,19 +860,25 @@ private fun AboutDialog(onDismiss: () -> Unit) {
             ) {
                 // Logo + name
                 Image(
-                    painter = painterResource(R.drawable.splash_logo),
+                    painter = painterResource(R.drawable.tyrantlator_icon_foreground),
                     contentDescription = null,
                     modifier = androidx.compose.ui.Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
+                        .size(80.dp)
+                        .background(androidx.compose.ui.graphics.Color(0xFF087F8C), RoundedCornerShape(16.dp))
                 )
                 Text(
-                    text = "Bannerlator Bionic",
+                    text = context.getString(R.string.app_name),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
                 )
                 val newer = update?.takeIf { it.isNewer }
+                Text(
+                    text = context.getString(R.string.tyrantlator_build_identity),
+                    fontSize = 12.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    color = com.winlator.star.ui.theme.OnSurfaceVariant
+                )
                 Text(
                     // Read from BuildConfig so it tracks the gradle versionName automatically
                     // and never drifts from the real app version again.
