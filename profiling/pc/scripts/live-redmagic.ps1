@@ -234,7 +234,21 @@ while((Get-Date) -lt $until){
   $appRead+="cat /sdcard/Android/data/$activePackage/files/tyrantlator-profile.json 2>/dev/null`necho`n"
  }
  $appRead+="`necho UPTIME`ncat /proc/uptime`n"
- try{$raw=& $adb -s $Serial shell ($shell+$appRead) 2>&1;$adbExit=$LASTEXITCODE}
+ try{
+  # Send the script over stdin: Windows PowerShell's native argument quoting
+  # otherwise alters embedded shell quotes and Windows executable paths.
+  $sampleInfo=New-Object System.Diagnostics.ProcessStartInfo
+  $sampleInfo.FileName=$adb;$sampleInfo.Arguments="-s $Serial shell sh -s"
+  $sampleInfo.UseShellExecute=$false;$sampleInfo.RedirectStandardInput=$true
+  $sampleInfo.RedirectStandardOutput=$true;$sampleInfo.RedirectStandardError=$true
+  $sampleProcess=[Diagnostics.Process]::Start($sampleInfo)
+  $sampleOut=$sampleProcess.StandardOutput.ReadToEndAsync()
+  $sampleError=$sampleProcess.StandardError.ReadToEndAsync()
+  $sampleProcess.StandardInput.Write(($shell+$appRead+"`n").Replace("`r",''))
+  $sampleProcess.StandardInput.Close();$sampleProcess.WaitForExit()
+  $raw=@(($sampleOut.GetAwaiter().GetResult()+"`n"+$sampleError.GetAwaiter().GetResult()) -split '\r?\n')
+  $adbExit=$sampleProcess.ExitCode;$sampleProcess.Dispose()
+ }
  finally{$ErrorActionPreference=$previousErrorAction}
  if($adbExit){throw "Live ADB read failed: $($raw -join ' ')"}
  $section='';$cores=@{};$freq=@();$allowedFreq=@();$hardwareFreq=@();$gpu='Unavailable';$gpuValue=$null
