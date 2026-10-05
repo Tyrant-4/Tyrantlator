@@ -6,13 +6,15 @@ function ConvertFrom-AppProfile {
  try {
   $data=$Json | ConvertFrom-Json -ErrorAction Stop
   if($data.schema -ne 1 -or $data.package -ne $Package -or $data.source -ne 'app_hud_present_intervals' -or -not $data.session){throw 'Invalid identity'}
-  if($null -eq $data.elapsed_ms -or $DeviceElapsedMs -le 0){throw 'Missing clock'}
-  $age=$DeviceElapsedMs-[double]$data.elapsed_ms
+  $exportElapsedMs=[double]$data.elapsed_ms
+  if($null -eq $data.elapsed_ms -or [double]::IsNaN($exportElapsedMs) -or [double]::IsInfinity($exportElapsedMs) -or $exportElapsedMs -lt 0 -or [double]::IsNaN($DeviceElapsedMs) -or [double]::IsInfinity($DeviceElapsedMs) -or $DeviceElapsedMs -le 0){throw 'Invalid clock'}
+  $age=$DeviceElapsedMs-$exportElapsedMs
   if($age -lt -1000 -or $age -gt 5000){$result.status='Stale app export';return $result}
   $result.session=$data.session;$result.game=$data.game;$result.container_id=$data.container_id;$result.display_backend=$data.display_backend
   if($data.status -eq 'stopped'){$result.status='App profiling session ended';return $result}
   if($data.status -eq 'idle'){$result.status='No recent HUD frame (idle, hidden HUD, or unbound window)';return $result}
-  if($data.status -ne 'active' -or $null -eq $data.frame_age_ms -or [double]$data.frame_age_ms -lt 0 -or [double]$data.frame_age_ms+$age -gt 1500){$result.status='No recent HUD frame';return $result}
+  $frameAgeMs=[double]$data.frame_age_ms
+  if($data.status -ne 'active' -or $null -eq $data.frame_age_ms -or [double]::IsNaN($frameAgeMs) -or [double]::IsInfinity($frameAgeMs) -or $frameAgeMs -lt 0 -or $frameAgeMs+$age -gt 1500){$result.status='No recent HUD frame';return $result}
   $fps=[double]$data.fps
   if($null -eq $data.fps -or [double]::IsNaN($fps) -or [double]::IsInfinity($fps) -or $fps -lt 0){throw 'Invalid FPS'}
   $values=@($data.intervals_ms)

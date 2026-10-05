@@ -17,6 +17,19 @@ $sample.status='active';$sample.frame_age_ms=1490;$data=Read-Sample
 Assert-True ($null -eq $data.fps) 'Old frame accepted despite fresh export'
 $sample.frame_age_ms=10;$sample.intervals_ms=@(0,16);$data=Read-Sample
 Assert-True ($null -eq $data.fps) 'Invalid interval accepted'
+$sample.intervals_ms=@(16,17)
+foreach($invalidClock in @('NaN','Infinity',-1)) {
+ $sample.elapsed_ms=$invalidClock;$data=Read-Sample
+ Assert-True ($null -eq $data.fps) 'Invalid export clock accepted'
+}
+$sample.elapsed_ms=10000
+foreach($invalidClock in @('NaN','Infinity',-1)) {
+ $sample.frame_age_ms=$invalidClock;$data=Read-Sample
+ Assert-True ($null -eq $data.fps) 'Invalid frame clock accepted'
+}
+$sample.frame_age_ms=10
+$data=ConvertFrom-AppProfile -Json ($sample | ConvertTo-Json -Compress) -Package 'com.tencent.ig' -DeviceElapsedMs ([double]::NaN)
+Assert-True ($null -eq $data.fps) 'Invalid device clock accepted'
 $sample.intervals_ms=@(1..121);$data=Read-Sample
 Assert-True ($null -eq $data.fps) 'Oversized history accepted'
 $data=ConvertFrom-AppProfile -Json '{broken' -Package 'com.tencent.ig' -DeviceElapsedMs 10100
