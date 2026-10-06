@@ -1,0 +1,28 @@
+const assert=require('node:assert/strict'),{create,metrics}=require('../scripts/change-alerts.js');
+const origin=Date.parse('2026-10-06T09:00:00Z');
+const frame=(s,fps=60,extra={})=>({session:'collector',generated_at:new Date(origin+s*1000).toISOString(),game:'test.exe',game_pid:7,container:'com.tencent.ig',backend:'DXVK',target_fps:60,monitoring:{collector_state:'running'},app_profile:{session:'game',fps,p95_ms:16},...extra});
+const accept=(d,s,fps=60,extra={})=>d.accept(frame(s,fps,extra),origin+s*1000);
+function warm(d){for(const s of [0,3,6])assert.equal(accept(d,s).length,0)}
+const d=create();warm(d);assert.equal(d.ready,true);
+let added=accept(d,9,40);assert.equal(added.length,1);assert.equal(added[0].before,60);assert.equal(added[0].after,40);assert.equal(added[0].delta,-20);assert.equal(d.unread,1);
+assert.equal(accept(d,9,40).length,0,'duplicate replay');assert.equal(accept(d,12,40).length,0,'sustained changed level repeats');
+added=accept(d,15,10);assert.equal(added.length,1,'further sharp drop lost');
+d.acknowledge();assert.equal(d.unread,0);assert.equal(d.events.length,2,'ack erased evidence');
+assert.equal(accept(d,18,10,{monitoring:{collector_state:'stopped'}}).length,0);assert.equal(d.mode,'stopped');assert.equal(d.events.length,2);
+assert.equal(accept(d,21,10,{session:'resumed'}).length,0);assert.equal(d.events.length,2,'resume erased latched history');
+for(const s of [24,27])accept(d,s,10,{session:'resumed'});
+assert.equal(accept(d,30,30,{session:'resumed'}).length,1,'upward change missed');
+assert.equal(accept(d,33,100,{game_pid:8}).length,0,'new game compared to old');assert.equal(d.events.length,0);
+const missing=create();warm(missing);accept(missing,9,null);assert.equal(accept(missing,12,20).length,0,'missing source bridged');assert.equal(missing.events.length,0);
+const stale=create();warm(stale);assert.equal(stale.accept(frame(9,20),origin+30000).length,0);assert.equal(stale.mode,'waiting');assert.equal(accept(stale,33,20).length,0,'stale gap bridged');
+const future=create();warm(future);assert.equal(future.accept(frame(30,20),origin+9000).length,0,'future sample accepted');
+const reordered=create();warm(reordered);assert.equal(accept(reordered,3,10).length,0,'out-of-order sample accepted');
+const small=create();warm(small);assert.equal(accept(small,9,55).length,0,'ordinary variation alerted');
+const slow=create(),slowData=(s,stamp,temp)=>({sampling:{thermal_at:new Date(origin+stamp*1000).toISOString()},thermal:{cpu_c:temp}});
+for(const s of [0,3,6])accept(slow,s,60,slowData(s,0,40));assert.equal(slow.ready,true);assert.equal(accept(slow,9,60,slowData(9,9,50)).length,0,'cached source counted as multiple samples');
+accept(slow,12,60,slowData(12,12,50));assert.equal(accept(slow,15,60,slowData(15,15,60)).filter(e=>e.key==='temp').length,1);
+assert.equal(accept(slow,18,60,slowData(18,15,60)).length,0,'cached high temperature repeated');
+const zero=create();for(const s of [0,3,6])accept(zero,s,60,{gpu:{busy_percent:0}});assert.equal(accept(zero,9,60,{gpu:{busy_percent:30}}).filter(e=>e.key==='gpu').length,1,'real zero lost');
+const bounded=create();for(let s=0;s<=300;s+=3)accept(bounded,s,s<9?60:s%6?10:100);assert.ok(bounded.events.length<=40);
+assert.equal(metrics.length,16);
+console.log('PASS: sudden change thresholds, warmup, sustained/further changes, acknowledgment, resume, identities, gaps, slow source freshness and bounds');

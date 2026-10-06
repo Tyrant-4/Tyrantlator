@@ -168,3 +168,32 @@ Available signals: phone CPU I/O-wait share, phone paging in/out in MiB/s, selec
 The clue is deliberately tentative: game reads/page faults plus phone I/O pressure or a blocked game thread, or a blocked game thread plus phone pressure, yields Possible storage stalls. Phone pressure means sampled PSI some >=5% or CPU I/O wait >=2%; these are heuristic thresholds, not hardware limits. Latest app present p95 (or compositor fallback) above 1.5 times the target frame budget adds with slow frames. Frame timing is a coincident recent window, not proof of causation. Phone pressure without a game signal remains game link uncertain; activity alone is not diagnosed as a bottleneck. No strong storage-stall evidence does not rule out missed short stalls or prove bandwidth headroom. Kernel counter semantics: https://www.kernel.org/doc/html/latest/filesystems/proc.html and https://www.kernel.org/doc/html/latest/accounting/psi.html.
 
 Rates use phone uptime, require two samples, reset on game identity changes and Resume, and reject reversed counters or intervals over 30 seconds. Missing data breaks graph lines. Stop freezes storage with the other readings. CSV logs retain storage timestamps and selected metrics. Refresh dashboard.html and restart an existing collector to load the updated sampling code; no APK update is required. Checks: storage.Tests.ps1, adaptive-sampling.Tests.ps1, adaptive-shell.Tests.ps1 and dashboard-product.test.js.
+
+## Sudden parameter changes
+A dashboard-side detector compares each newest fresh reading with the median of its own preceding 30-second window. It requires at least three source readings spanning five seconds; slow thermal/storage sources use their own timestamps, so cached readings do not count as new samples. No ADB queries, phone services, logging changes or APK updates are added. Detection runs while any dashboard tab is selected, using the existing incoming live snapshots.
+
+A persistent header badge and floating notification show unacknowledged changes. Click either to open the Overview change panel, where the last 40 events show parameter, source time, recent value, new value, signed change and baseline window. Headline readings get a 15-second outline. Acknowledge dismisses the badge/notification and keeps the history. A sustained new level does not repeatedly alert, but a further sharp move can create another event. Both rises and falls are tracked, without labeling the change as a proven cause or automatically changing settings. Menus/loading and deliberate setting changes can trigger alerts too.
+
+Sound is optional and off on each dashboard load. Click Sound: off to enable a short tone for each new batch, rather than one per parameter. Muting suspends the audio context. Browser autoplay restrictions require this user click; sound availability is handled separately from visual alerts. The browser must remain open and receive fresh snapshots; minimized/background browser scheduling may delay detection, and a sampled dashboard cannot catch every sub-sample spike.
+
+Thresholds require BOTH an absolute change and the listed relative change from the recent median:
+
+| Reading | Absolute change | Relative change |
+| --- | ---: | ---: |
+| App FPS | 10 FPS | 20% |
+| App present p95 | 5 ms | 35% |
+| Compositor p95 | 8 ms | 50% |
+| GPU busy | 20 percentage points | — |
+| Game CPU | 1 busy core | 30% |
+| Available RAM | 512 MB | 15% |
+| CPU / GPU temperature | 3 °C | — |
+| CPU allowed-limit drop | 8 percentage points | — |
+| DXVK shader-worker CPU | 0.5 busy cores | 75% |
+| Busiest measured thread CPU queue | 100 ms/s | 100% |
+| FEX JIT work in sample | 10 ms | 100% |
+| Phone swap-in | 256 pages/s | 100% |
+| Phone CPU I/O wait | 2 percentage points | — |
+| Phone paging in | 20 MiB/s | 100% |
+| Game major page faults | 100/s | 100% |
+
+Missing sources, stale snapshots, pauses and source gaps over 15 seconds restart affected baselines. Collector/backend/app-profile session changes reset baselines; the same game's existing alerts survive a PC Stop/Resume. A changed game/process clears old history. Duplicate and reversed timestamps do not create events. History lives in the open dashboard and resets when it is reloaded. Checks: node tests/change-alerts.test.js; node tests/dashboard-product.test.js (includes opt-in batch audio and cross-tab notification behavior).
