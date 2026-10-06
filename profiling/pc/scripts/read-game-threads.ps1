@@ -35,7 +35,7 @@ function ConvertFrom-GameThreads {
    }
   }
   $current[$id]=@{ticks=$ticks;start=$start;type=$type;scheduler=$sched}
-  [pscustomobject]@{tid=[int]$id;name=$name;state=$state;last_core=$lastCore;role=$role;type=$type;cpu_ms_per_s=$rate;cpu_cores=$(if($null -ne $rate){$rate/1000}else{$null});cpu_percent=$(if($null -ne $rate){$rate/10}else{$null});status=$status;cpu_queue_ms_per_s=$queue;scheduled_ms_per_s=$scheduled;queue_status=$queueStatus}
+  [pscustomobject]@{tid=[int]$id;start_token=$start;name=$name;state=$state;last_core=$lastCore;role=$role;type=$type;cpu_ms_per_s=$rate;cpu_cores=$(if($null -ne $rate){$rate/1000}else{$null});cpu_percent=$(if($null -ne $rate){$rate/10}else{$null});status=$status;cpu_queue_ms_per_s=$queue;scheduled_ms_per_s=$scheduled;queue_status=$queueStatus}
  })
  $groups=@{}
  foreach($type in @('shader','submit','dxvkOther','vkd3d','d8vk','wineInGame')){

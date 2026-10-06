@@ -119,7 +119,7 @@ $('clearComparisons').onclick=()=>{runs.A=null;save();render();message('Baseline
 
 $('exportComparisons').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,...runs},null,2)],{type:'application/json'}));const a=doc.createElement('a');a.href=url;a.download='tyrantlator-live-comparison.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 
-setInterval(()=>{if(current&&Date.now()-Date.parse(current.generated_at)>10000){runs.B=null;render();$('backgroundStatus').textContent='Paused · these process readings are from the last sample, not live.';$('gameThreadStatus').textContent='Paused · these thread readings are from the last sample, not live.';message('Collector paused. Live comparison unavailable; pinned baseline kept.')}},1000);
+setInterval(()=>{if(current&&Date.now()-Date.parse(current.generated_at)>10000){runs.B=null;render();$('backgroundStatus').textContent='Paused · these process readings are from the last sample, not live.';$('gameThreadStatus').textContent='Paused · these thread readings are from the last sample, not live.';$('cpuQueueStatus').textContent='Paused: CPU queue readings are from the last sample.';message('Collector paused. Live comparison unavailable; pinned baseline kept.')}},1000);
 
 const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);gameThreads(d);cpuQueue(d);background(d);accept(d)};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
 

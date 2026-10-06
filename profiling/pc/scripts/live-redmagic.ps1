@@ -507,7 +507,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
-  game_threads=[pscustomobject]@{total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
+  game_threads=[pscustomobject]@{timeline_complete=($gameThreads.rows.Count -le 512);timeline_rows=@($gameThreads.rows | Select-Object -First 512);total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
   background_cpu=[pscustomobject]@{status=$background.status;processes=$background.processes;alerts=$background.alerts}
   assessment=$assessment;evidence=$evidence;next_check=$nextCheck

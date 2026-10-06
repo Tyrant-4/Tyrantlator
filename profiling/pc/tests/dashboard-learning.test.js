@@ -17,7 +17,8 @@ class Clock extends Date{constructor(...args){super(...(args.length?args:[now]))
 class Element{constructor(){this.children=[];this.textContent='';this.value='';this.disabled=false}append(...x){this.children.push(...x)}replaceChildren(...x){this.children=x}click(){this.onclick?.()}}
 const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)};
 const store=new Map(),document={getElementById:get,createElement:()=>new Element()};
-const context={window:{document,localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},renderProfileData:()=>{}},Date:Clock,setTimeout:()=>1,setInterval:()=>1,clearTimeout:()=>{},URL:{},Blob:class{}};
+const timers=[];
+const context={window:{document,localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},renderProfileData:()=>{}},Date:Clock,setTimeout:()=>1,setInterval:fn=>{timers.push(fn);return 1},clearTimeout:()=>{},URL:{},Blob:class{}};
 vm.runInNewContext(fs.readFileSync(require.resolve('../scripts/dashboard-learning.js'),'utf8'),context);
 function update(pid=10){context.window.renderProfileData({...d,generated_at:new Clock().toISOString(),game_pid:pid,process_family:[{pid:10,name:'game.exe',relation:'Selected game',state:'S',cpu_cores:1,rss_mb:100,ppid:1}]})}
 update();get('pinBaseline').click();assert.match(get('comparisonStatus').textContent,/five fresh/);
@@ -44,3 +45,7 @@ assert.equal(get('cpuQueueRows').children[0].children[1].children[1].textContent
 context.window.renderProfileData({...d,generated_at:new Clock().toISOString(),game_threads:{total:2,queue_measured:0,queue_rows:[],rows:[]}});
 assert.match(get('cpuQueueRows').textContent,/unavailable or warming up/);
 console.log('PASS: CPU queue coverage and unavailable rendering');
+
+now+=12000;for(const tick of timers)tick();
+assert.match(get('cpuQueueStatus').textContent,/Paused/);
+console.log('PASS: stale CPU queue panel is marked paused');
