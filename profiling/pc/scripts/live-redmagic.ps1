@@ -379,7 +379,7 @@ while((Get-Date) -lt $until){
  $previousAllThreads=$gameThreads.previous;$previousThreadsAt=$now
  $threadNow=$gameThreads.previous
  foreach($thread in $threadNow.Values){
-  if($thread.type -in @('shader','submit','dxvkOther')){$backendSeen['DXVK']=$true}
+  if($thread.type -in @('shader','command','submit','dxvkOther')){$backendSeen['DXVK']=$true}
   elseif($thread.type -eq 'vkd3d'){$backendSeen['VKD3D']=$true}
   elseif($thread.type -eq 'd8vk'){$backendSeen['D8VK']=$true}
  }
@@ -495,6 +495,7 @@ while((Get-Date) -lt $until){
  $layerRows+=([pscustomobject]@{name='Wine helpers';value=$wineHelpers})
  if($backendSeen.ContainsKey('DXVK')){
   $layerRows+=([pscustomobject]@{name='DXVK shader workers';value=$shaderWorkers})
+  $layerRows+=([pscustomobject]@{name='DXVK command-stream workers';value=$workerRates.command})
   $layerRows+=([pscustomobject]@{name='DXVK submit workers';value=$submitWorkers})
   $layerRows+=([pscustomobject]@{name='Other DXVK workers';value=$dxvkWorkers})
  }
@@ -507,6 +508,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
+  graphics_workers=$gameThreads.groups
   game_threads=[pscustomobject]@{timeline_complete=($gameThreads.rows.Count -le 512);timeline_rows=@($gameThreads.rows | Select-Object -First 512);total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
   background_cpu=[pscustomobject]@{status=$background.status;processes=$background.processes;alerts=$background.alerts}

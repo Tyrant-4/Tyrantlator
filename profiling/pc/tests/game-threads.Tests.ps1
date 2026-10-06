@@ -31,3 +31,9 @@ if($null -ne $reset.rows[0].cpu_queue_ms_per_s -or $reset.rows[0].queue_status -
 $missingSched=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'worker' 200)) -Previous $q1.previous -ElapsedSeconds 2
 if($null -ne $missingSched.rows[0].cpu_queue_ms_per_s -or $missingSched.rows[0].queue_status -notmatch 'not readable'){throw 'Missing scheduler source fabricated queue rate'}
 'PASS: scheduler queue units, TID reuse, inactive counters, resets and missing-source handling'
+$g1=ConvertFrom-GameThreads -Lines @((ThreadLine 20 'dxvk-cs' 100),(ThreadLine 21 'dxvk-shader-0' 100),(ThreadLine 22 'dxvk-shader-1' 100),(SchedLine 20 1000000000 100000000),(SchedLine 21 1000000000 100000000))
+$g2=ConvertFrom-GameThreads -Lines @((ThreadLine 20 'dxvk-cs' 200),(ThreadLine 21 'dxvk-shader-0' 150),(ThreadLine 22 'dxvk-shader-1' 100),(SchedLine 20 2000000000 500000000 20),(SchedLine 21 1500000000 300000000 20)) -Previous $g1.previous -ElapsedSeconds 2
+if($g2.groups.command.cpu_ms_per_s -ne 500 -or $g2.groups.command.cpu_queue_ms_per_s -ne 200 -or $g2.groups.dxvkOther.count -ne 0){throw 'Command stream grouping or queue aggregation incorrect'}
+if($g2.groups.shader.active -ne 1 -or $g2.groups.shader.count -ne 2 -or $g2.groups.shader.queue_measured -ne 1 -or $g2.groups.shader.cpu_queue_ms_per_s -ne 100){throw 'Shader activity/partial queue coverage incorrect'}
+if($null -ne $g1.groups.shader.active){throw 'Unmeasured shader workers labeled idle'}
+'PASS: graphics command grouping, active vs idle workers and partial queue coverage'
