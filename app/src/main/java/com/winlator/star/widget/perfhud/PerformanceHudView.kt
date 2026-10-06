@@ -299,7 +299,22 @@ class PerformanceHudView(
     // ---- Lifecycle: self-refresh timer ------------------------------------
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        startUpdates()
+        syncUpdateVisibility()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        syncUpdateVisibility()
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        syncUpdateVisibility()
+    }
+
+    private fun syncUpdateVisibility() {
+        if (!isAttachedToWindow) return
+        if (isShown && windowVisibility == VISIBLE) startUpdates() else stopUpdates()
     }
 
     override fun onDetachedFromWindow() {

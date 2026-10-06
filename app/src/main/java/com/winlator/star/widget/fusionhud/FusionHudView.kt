@@ -262,7 +262,24 @@ class FusionHudView(
     // ---- Lifecycle: self-refresh ------------------------------------------
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        startUpdates()
+        syncUpdateVisibility()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        syncUpdateVisibility()
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        syncUpdateVisibility()
+    }
+
+    private fun syncUpdateVisibility() {
+        // View may call visibility hooks during construction, before the coroutine scope exists.
+        if (!isAttachedToWindow) return
+        if (isShown && windowVisibility == VISIBLE) startUpdates()
+        else { updateJob?.cancel(); updateJob = null }
     }
 
     override fun onDetachedFromWindow() {
