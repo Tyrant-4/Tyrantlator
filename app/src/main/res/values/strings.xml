@@ -5,7 +5,7 @@
     ]>
 <resources>
     <string name="app_name">Tyrantlator</string>
-    <string name="tyrantlator_build_identity">Tyrantlator · Profiling build 2\nTyrant-4 fork · Based on Bannerlator 3.1.5</string>
+    <string name="tyrantlator_build_identity">Tyrantlator · Profiling build 3\nTyrant-4 fork · Based on Bannerlator 3.1.5</string>
     <string name="run">Run</string>
     <string name="edit">Edit</string>
     <string name="remove">Remove</string>
@@ -2584,4 +2584,6 @@ trying for speed, <b>notemplates</b> if you get driver crashes.
         <b>Microphone</b><br /><br />
         Lets a game use the microphone for voice chat. It is meant for the <b>games the client launches</b>, not for the Steam client. It does nothing in a Linux session yet: the switch is wired for the Windows side, and the Linux side that would carry the sound in is not in place.
     ]]></string>
+    <string name="tyrantlator_live_profiling">Live profiling</string>
+    <string name="tyrantlator_live_profiling_hint">Exports live frame data with the HUD hidden too. Remembers this game’s choice.</string>
 </resources>

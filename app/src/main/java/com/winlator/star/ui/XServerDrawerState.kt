@@ -435,6 +435,11 @@ object XServerDrawerState {
     private val _fpsConfig = MutableStateFlow("")
     val fpsConfig: StateFlow<String> = _fpsConfig
 
+    private val _profilingEnabled = MutableStateFlow(false)
+    val profilingEnabled: StateFlow<Boolean> = _profilingEnabled
+    fun setProfilingEnabled(v: Boolean) { _profilingEnabled.value = v }
+    @JvmField var onProfilingToggle: java.util.function.Consumer<Boolean>? = null
+
     // On-screen controls overlay opacity (0..1), tuned live from the Controls tab.
     private val _overlayOpacity = MutableStateFlow(0.75f)
     val overlayOpacity: StateFlow<Float> = _overlayOpacity
@@ -788,6 +793,8 @@ object XServerDrawerState {
         _swipeSticks.value = false
         _fpsExpanded.value = false
         _fpsConfig.value = ""
+        _profilingEnabled.value = false
+        onProfilingToggle = null
         _overlayOpacity.value = 0.75f
         _controlsFollowTheme.value = true
         _controlsAccentColor.value = 0xFF0055FF.toInt()

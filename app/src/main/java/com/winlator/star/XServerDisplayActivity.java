@@ -282,6 +282,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
     // show the identical number (there is one place per renderer to feed).
     private final FpsCounter fpsCounter = new FpsCounter();
     private com.winlator.star.perf.ProfileExporter profileExporter;
+    private volatile boolean profilingEnabled;
     // Lazily built when the Task Manager first polls; snapshots CPU/GPU/RAM/battery for the header.
     private com.winlator.star.widget.HudMetrics tmHudMetrics;
     private boolean fpsHudHorizontal = false;   // active FPS-overlay orientation (tap to toggle in-game)
@@ -369,13 +370,13 @@ public class XServerDisplayActivity extends AppCompatActivity {
     // Prefer-big-cores live re-pin: guest pid -> its affinity mask BEFORE we changed it, so toggle OFF
     // restores each process exactly (revert philosophy). Populated on toggle ON, cleared on OFF.
     private final java.util.HashMap<Integer, Integer> bigCoreAffinitySnapshot = new java.util.HashMap<>();
-    private int frameRatingWindowId = -1;
+    private volatile int frameRatingWindowId = -1;
     // Wayland mode has no X window to bind the HUD to; the compositor's game window stands in.
     private static final int WAYLAND_HUD_WINDOW_ID = Integer.MAX_VALUE;
     // Master HUD on/off, parsed from the fps config's `hudEnabled` key (default on). When false, every
     // overlay style stays GONE even while a game window is bound to frameRatingWindowId — the drawer's
     // "Show HUD" master toggle drives this live via onFpsConfigApply.
-    private boolean hudCounterEnabled = true;
+    private volatile boolean hudCounterEnabled = true;
     // Windows that have published a _MESA_DRV property (GPU/render windows). The perf HUD binds to one
     // of these (frameRatingWindowId); we keep the whole set so that when the bound window unmaps we can
     // re-bind to another still-live one instead of hiding the HUD permanently — games like Dirt 3 /
@@ -1298,7 +1299,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
      * or {@code mesaDrvWindowIds} here (those are owned by the WM thread) — the volatile int is enough.
      */
     private void driveHudFrameTick(int wid) {
-        if (frameRatingWindowId == -1 || !hudCounterEnabled) return;   // HUD inactive or toggled off -> never count
+        if (frameRatingWindowId == -1 || !isFrameSamplingEnabled()) return;
         if (wid != frameRatingWindowId && wid != glZinkHealedWindowId) {
             if (!guestGlIsZink()) return;                      // only the GL/Zink present topology
             // Device-observed (Stronghold Crusader / Zink): the window the game actually presents to is
@@ -1318,6 +1319,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
             glZinkHealedWindowId = wid;
         }
         fpsCounter.tick();
+        if (!isHudSamplingEnabled()) return; // Profiling can count frames without refreshing the overlay.
         if (frameRating != null) frameRating.update();
         if (frameRatingHorizontal != null) frameRatingHorizontal.update();
         if (perfHud != null) perfHud.update();
@@ -1369,12 +1371,47 @@ public class XServerDisplayActivity extends AppCompatActivity {
         // upgrade it to the real API — "D3D12 · VKD3D" for D3D12 titles, "D3D11 · DXVK" etc. for the
         // wrapped path, or "Vulkan"/"Zink"/"OpenGL" for native-API games.
         startDxApiDetection(rendererMode, dxName);
-        EnvVars profileEnv = effectiveUserEnv();
-        if (profileExporter == null && profileEnv != null
-                && "1".equals(profileEnv.get("TYRANTLATOR_PROFILE"))) {
-            profileExporter = new com.winlator.star.perf.ProfileExporter(this, fpsCounter,
-                    currentLogGameName(), container.id, waylandMode ? "wayland" : resolvedR,
-                    () -> hudCounterEnabled && frameRatingWindowId != -1);
+    }
+
+    private boolean isFrameSamplingEnabled() {
+        return profilingEnabled || isHudSamplingEnabled();
+    }
+
+    private boolean isHudSamplingEnabled() {
+        return hudCounterEnabled && (perfHud != null || gameNativeHud != null
+                || fusionHud != null || frameRating != null || frameRatingHorizontal != null);
+    }
+
+    /** Start/stop only the local exporter; renderer, guest environment and game processes stay live. */
+    private void setProfilingEnabled(boolean enabled, boolean persist) {
+        if (container == null) return;
+        if (enabled && !profilingEnabled && !isFrameSamplingEnabled()) fpsCounter.reset();
+        profilingEnabled = enabled;
+        if (enabled) {
+            if (!waylandMode) ensureHudBoundToGameWindow();
+            if (profileExporter == null) {
+                profileExporter = new com.winlator.star.perf.ProfileExporter(this, fpsCounter,
+                        currentLogGameName(), container.id, waylandMode ? "wayland" : resolvedRenderer(),
+                        () -> profilingEnabled && frameRatingWindowId != -1);
+            } else profileExporter.setEnabled(true);
+        } else {
+            if (profileExporter != null) profileExporter.setEnabled(false);
+            if (!isFrameSamplingEnabled()) {
+                fpsCounter.reset();
+                if (!waylandMode) { frameRatingWindowId = -1; glZinkHealedWindowId = -1; }
+            }
+        }
+        XServerDrawerState.INSTANCE.setProfilingEnabled(enabled);
+        if (persist) {
+            EnvVars env = new EnvVars(shortcut != null ? shortcut.getExtra("envVars", "") : container.getEnvVars());
+            env.put("TYRANTLATOR_PROFILE", enabled ? "1" : "0");
+            if (shortcut != null) {
+                shortcut.putExtra("envVars", env.toString());
+                shortcut.saveData();
+            } else {
+                container.setEnvVars(env.toString());
+                container.saveData();
+            }
         }
     }
 
@@ -2435,6 +2472,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         };
         String fpsCfg = resolvedFPSCounterConfig();
         state.setFpsConfig(fpsCfg);
+        state.onProfilingToggle = enabled -> runOnUiThread(() -> setProfilingEnabled(enabled, true));
         state.onFpsConfigApply = (newConfig) -> {
             if (newConfig == null) return;
             state.setFpsConfig(newConfig);
@@ -7223,6 +7261,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        profilingEnabled = false;
         if (profileExporter != null) { profileExporter.close(); profileExporter = null; }
         // The last word on the handheld's companion screen, whatever took this session down (Exit, the
         // game's own watcher, a recents swipe, the system). Every other dismissal is about telling the
@@ -8935,8 +8974,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 // only counts the frame. The HUD's own refresh (FrameRating/PerfHudView.update: sysfs
                 // temperature/GPU-load reads and BatteryManager binder calls, every 500 ms) runs on the
                 // sampler thread; one job is queued at a time, so a fast game can't pile them up.
-                if (frameRatingWindowId == -1 || !hudCounterEnabled) return;
+                if (frameRatingWindowId == -1 || !isFrameSamplingEnabled()) return;
                 fpsCounter.tick();
+                if (!isHudSamplingEnabled()) return;
                 android.os.Handler h = waylandHudSampler;
                 if (h != null && waylandHudSampleQueued.compareAndSet(false, true)) h.post(waylandHudSample);
             }
@@ -11563,6 +11603,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (container != null && container.isShowFPS()) {
             ensureHudBuilt();
         }
+        EnvVars profileEnv = effectiveUserEnv();
+        setProfilingEnabled(profileEnv != null && "1".equals(profileEnv.get("TYRANTLATOR_PROFILE")), false);
 
         // Resolve the fullscreen aspect-ratio mode (#71): a per-game shortcut override wins, else the
         // container's setting, with backward-compat for the legacy per-game "fullscreenStretched".
@@ -16184,7 +16226,8 @@ return true;
     }
 
     private void changeFrameRatingVisibility(Window window, Property property) {
-        if (perfHud == null && gameNativeHud == null && fusionHud == null && frameRating == null && frameRatingHorizontal == null) return;
+        if (!profilingEnabled && perfHud == null && gameNativeHud == null && fusionHud == null
+                && frameRating == null && frameRatingHorizontal == null) return;
 
         if (property != null) {
             boolean isMesaDrv = property.nameAsString().contains("_MESA_DRV");
@@ -16216,9 +16259,11 @@ return true;
                     }
                 });
 
-                if (frameRating != null) frameRating.update();
-                if (frameRatingHorizontal != null) frameRatingHorizontal.update();
-                if (perfHud != null) perfHud.update();
+                if (hudCounterEnabled) {
+                    if (frameRating != null) frameRating.update();
+                    if (frameRatingHorizontal != null) frameRatingHorizontal.update();
+                    if (perfHud != null) perfHud.update();
+                }
             }
             if (property.nameAsString().contains("_MESA_DRV_GPU_NAME")) {
                 // Reduce the raw renderer string (e.g. "zink Vulkan 1.4(Wrapper(Adreno (TM) 750)

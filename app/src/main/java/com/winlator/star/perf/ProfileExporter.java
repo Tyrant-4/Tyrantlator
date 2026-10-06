@@ -27,9 +27,9 @@ public final class ProfileExporter implements AutoCloseable {
     private final int containerId;
     private final String displayBackend;
     private final BooleanSupplier sourceEnabled;
-    private final String session = UUID.randomUUID().toString();
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
-    private final ScheduledFuture<?> task;
+    private ScheduledFuture<?> task;
+    private String session;
     private boolean closed;
 
     public ProfileExporter(Context context, FpsCounter counter, String game, int containerId,
@@ -42,10 +42,25 @@ public final class ProfileExporter implements AutoCloseable {
         packageName = context.getPackageName();
         File directory = context.getExternalFilesDir(null);
         output = directory == null ? null : new AtomicFile(new File(directory, "tyrantlator-profile.json"));
-        task = worker.scheduleWithFixedDelay(() -> write(false), 0, 1, TimeUnit.SECONDS);
+        setEnabled(true);
     }
 
-    private void write(boolean stopped) {
+    /** All writes share one worker, including the final marker, so rapid toggles cannot race files. */
+    public synchronized void setEnabled(boolean enabled) {
+        if (closed || enabled == (task != null)) return;
+        if (enabled) {
+            session = UUID.randomUUID().toString();
+            String activeSession = session;
+            task = worker.scheduleWithFixedDelay(() -> write(false, activeSession), 0, 1, TimeUnit.SECONDS);
+        } else {
+            task.cancel(false);
+            task = null;
+            String stoppedSession = session;
+            worker.execute(() -> write(true, stoppedSession));
+        }
+    }
+
+    private void write(boolean stopped, String exportSession) {
         if (output == null) return;
         FileOutputStream stream = null;
         try {
@@ -54,7 +69,7 @@ public final class ProfileExporter implements AutoCloseable {
                     && frames.frameAgeMs >= 0 && frames.frameAgeMs <= 1500;
             JSONObject json = new JSONObject();
             json.put("schema", 1);
-            json.put("session", session);
+            json.put("session", exportSession);
             json.put("package", packageName);
             json.put("game", game);
             json.put("container_id", containerId);
@@ -78,9 +93,8 @@ public final class ProfileExporter implements AutoCloseable {
 
     @Override public synchronized void close() {
         if (closed) return;
+        setEnabled(false);
         closed = true;
-        task.cancel(false);
-        worker.execute(() -> write(true));
         worker.shutdown();
     }
 }
