@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'dashboard.html'),'utf8');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length,'Duplicate dashboard IDs');
+const sectionStack=[];for(const m of html.matchAll(/<\/?section\b[^>]*>|<[^>]+\bid="storageRows"[^>]*>/g)){if(m[0].startsWith('</section')){assert.ok(sectionStack.length,'Unmatched section end');sectionStack.pop()}else if(m[0].startsWith('<section'))sectionStack.push(m[0].match(/\bid="([^"]+)"/)?.[1]);else assert.ok(sectionStack.includes('panel-overview'),'Storage outside Overview')}assert.equal(sectionStack.length,0,'Unclosed dashboard section');
 class Element{
  constructor(attrs={}){this.attrs=attrs;this.children=[];this.textContent='';this.style={};this.clientWidth=800;this.clientHeight=248;this.disabled=false;this.value='';this.hidden=attrs.hidden!==undefined;this.paints=0}
  append(...e){this.children.push(...e)}replaceChildren(...e){this.children=e;this.paints++}setAttribute(k,v){this.attrs[k]=v}getAttribute(k){return this.attrs[k]}focus(){}remove(){}click(){this.onclick?.()}
@@ -20,4 +21,10 @@ for(const tab of tabs){tab.onclick();assert.equal(get(tab.getAttribute('aria-con
 context.renderProfileData({...base,monitoring:{collector_state:'stopped',scheduler_stats_enabled:true}});assert.match(get('statusText').textContent,/frozen/);get('tab-cpu').onclick();assert.match(get('cpuQueueStatus').textContent,/Stopped/);assert.match(get('threadTimelineStatus').textContent,/Stopped/);get('tab-graphics').onclick();assert.match(get('graphicsActivityStatus').textContent,/Stopped/);assert.equal(get('pinBaseline').disabled,true);
 context.renderProfileData({...base,game:'Unavailable',game_pid:null,app_profile:{fps:null,p95_ms:null,status:'Idle'},gpu:{busy_percent:null},monitoring:{collector_state:'running',scheduler_stats_enabled:false}});get('tab-overview').onclick();assert.equal(get('hudFps').textContent,'—');assert.equal(get('gpu').textContent,'—');assert.equal(get('hudP95').textContent,'—');get('tab-cpu').onclick();assert.match(get('cpuQueueRows').textContent,/off/);
 context.renderProfileData({...base,generated_at:new Date(Date.now()-20000).toISOString()});assert.match(get('statusText').textContent,/Disconnected/);
-console.log('PASS: complete dashboard render, all tab views, DOM coverage, live/stopped/missing/disconnected states');
+context.renderProfileData({...base,generated_at:new Date().toISOString(),storage:{status:'Possible storage stalls',evidence:'Sampled evidence',game_major_faults_s:10,game_blocked_threads:1,io_wait_percent:3,throughput_status:'Unavailable: permission denied'},storage_history:[{io_wait_percent:3,frame_p95_ms:60}]});get('tab-overview').onclick();
+assert.equal(get('storageStatus').textContent,'Possible storage stalls');assert.equal(get('storageEvidence').textContent,'Sampled evidence');
+assert.ok(get('storageRows').children.some(r=>r.children.some(c=>c.textContent==='Unavailable: permission denied')));
+context.renderProfileData({...base,monitoring:{collector_state:'stopped'},storage:{status:'No strong storage-stall evidence'}});assert.match(get('storageStatus').textContent,/Stopped.*frozen/);
+context.renderProfileData({...base,generated_at:new Date().toISOString()});assert.match(get('storageStatus').textContent,/updated collector/);
+const storageRow=get('storageRows').children.find(r=>r.children[0].textContent==='Game major page faults');assert.equal(storageRow.children[1].textContent,'—');
+console.log('PASS: complete dashboard render, all tabs, storage data/missing/frozen, DOM coverage and connection states');

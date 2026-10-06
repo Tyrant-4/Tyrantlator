@@ -22,6 +22,8 @@ try{
   return
  }
 . (Join-Path $PSScriptRoot 'adaptive-sampling.ps1')
+. (Join-Path $PSScriptRoot 'read-storage.ps1')
+$previousStorage=@{};$storage=$null;$storageHistory=New-Object 'System.Collections.Generic.List[object]'
 . (Join-Path $PSScriptRoot 'monitor-control.ps1')
 $monitorControl=Start-MonitorControl
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
@@ -127,7 +129,7 @@ cat /sys/class/kgsl/kgsl-3d0/gpubusy 2>/dev/null || echo unavailable
 echo MEM
 grep -E 'MemTotal:|MemAvailable:|SwapTotal:|SwapFree:' /proc/meminfo
 echo SWAPIO
-grep -E '^pswp(in|out) ' /proc/vmstat
+grep -E '^(pswp(in|out)|pgpg(in|out)) ' /proc/vmstat
 echo THERMAL
 if [ 'THERMAL_DUE' = 1 ]; then
 echo SAMPLED_THERMAL
@@ -197,6 +199,14 @@ if [ -n "$gamePid" ]; then
  cat /proc/$gamePid/task/*/stat 2>/dev/null
  SCHEDULER_SAMPLE_PLACEHOLDER
 fi
+echo STORAGE
+if [ 'STORAGE_DUE' = 1 ] || [ "$gamePid" != 'CACHED_GAME_PID' ]; then
+echo SAMPLED_STORAGE
+if [ -n "$gamePid" ]; then
+ awk '/^(read_bytes|write_bytes):/ {print "GAMEIO", $0}' "/proc/$gamePid/io" 2>/dev/null
+fi
+awk '{print "PSI", $0}' /proc/pressure/io 2>/dev/null
+fi
 echo BACKGROUND
 if [ 'BACKGROUND_DUE' = 1 ] || [ "$gamePid" != 'CACHED_GAME_PID' ]; then
 echo SAMPLED_BACKGROUND
@@ -228,12 +238,13 @@ while((Get-Date) -lt $until){
   $previousAllThreads=@{};$previousThreadsAt=$null;$previousFamily=@{};$previousFamilyAt=$null;$previousBackground=@{}
   $surfaceLayer=$null;$lastFrameReady=[long]0;$staleSurfaceSamples=0;$trackedGamePid=$null;$allowedBaseline=@{}
   $adaptive=New-AdaptiveSamplingState;$cachedTemps=$null;$family=$null;$background=$null
+  $previousStorage=@{};$storage=$null;$storageHistory.Clear()
   $timingHistory.Clear();$gpuRecent.Clear();$dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{}
  }
  $collectionTimer=[Diagnostics.Stopwatch]::StartNew()
  $samplePlan=Get-AdaptiveSamplePlan -State $adaptive
  $cachedPid=if($trackedGamePid -match '^\d+$'){$trackedGamePid}else{''}
- $sampleShell=$shell.Replace('THERMAL_DUE',[int][bool]$samplePlan.thermal).Replace('FAMILY_DUE',[int][bool]$samplePlan.family).Replace('BACKGROUND_DUE',[int][bool]$samplePlan.background).Replace('CACHED_GAME_PID',$cachedPid)
+ $sampleShell=$shell.Replace('THERMAL_DUE',[int][bool]$samplePlan.thermal).Replace('FAMILY_DUE',[int][bool]$samplePlan.family).Replace('BACKGROUND_DUE',[int][bool]$samplePlan.background).Replace('STORAGE_DUE',[int][bool]$samplePlan.storage).Replace('CACHED_GAME_PID',$cachedPid)
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
  if($Package -eq 'auto' -and $surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
  $frameTime='Waiting for surface updates';$frameRate='Waiting for surface updates';$newFrameCount=0
@@ -301,13 +312,14 @@ while((Get-Date) -lt $until){
  $backgroundLines=New-Object 'System.Collections.Generic.List[string]'
  $familyLines=New-Object 'System.Collections.Generic.List[string]'
  $appJson='';$deviceElapsedMs=0
- $thermalFresh=$false;$familyFresh=$false;$backgroundFresh=$false
+ $thermalFresh=$false;$familyFresh=$false;$backgroundFresh=$false;$storageFresh=$false
  foreach($item in $raw){
   $line="${item}".Trim()
+  if($line -eq 'SAMPLED_STORAGE'){$storageFresh=$true;continue}
   if($line -eq 'SAMPLED_THERMAL'){$thermalFresh=$true;continue}
   if($line -eq 'SAMPLED_FAMILY'){$familyFresh=$true;continue}
   if($line -eq 'SAMPLED_BACKGROUND'){$backgroundFresh=$true;continue}
-  if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','FAMILY','BACKEND','THREADS','BACKGROUND','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
+  if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','FAMILY','BACKEND','THREADS','STORAGE','BACKGROUND','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
   switch($section){
    FAMILY {[void]$familyLines.Add($line)}
    BACKGROUND {[void]$backgroundLines.Add($line)}
@@ -386,6 +398,7 @@ while((Get-Date) -lt $until){
  }
  if($gamePid -ne $trackedGamePid){
   $family=$null;$background=$null;$previousFamily=@{};$previousFamilyAt=$null
+  $storage=$null;$previousStorage=@{};$storageHistory.Clear()
   $trackedGamePid=$gamePid;$previousAllThreads=@{};$previousThreadsAt=$null;$previousBackground=@{};$previousGame=$null;$gpuRecent.Clear();$allowedBaseline=@{}
   $dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{};$timingHistory.Clear()
   $median=$null;$p95=$null;$newFrameCount=0;$spike33=0;$spike50=0
@@ -393,6 +406,14 @@ while((Get-Date) -lt $until){
  }
  $appProfile=ConvertFrom-AppProfile -Json $appJson -Package $activePackage -DeviceElapsedMs $deviceElapsedMs
  $now=Get-Date
+ if($storageFresh){
+  $storageP95=if($null -ne $appProfile.p95_ms){$appProfile.p95_ms}elseif($null -ne $p95){$p95}else{0}
+  $storageSample=ConvertFrom-StorageSample -Lines $raw -Previous $previousStorage -DeviceSeconds ($deviceElapsedMs/1000) -At $now -FrameP95 $storageP95 -FrameBudget $targetMs
+  $storage=$storageSample.data;$previousStorage=$storageSample.previous;$adaptive.storage=$now
+  [void]$storageHistory.Add($storage)
+  if($storageHistory.Count -gt 60){$storageHistory.RemoveAt(0)}
+  if($storage.status -like 'Possible storage stalls*'){Add-ProfileEvent -Kind 'storage' -Title $storage.status -Detail ('Game major faults {0:N1}/s; D-state threads {1}; phone I/O wait {2:N1}%; check live storage signals.' -f $storage.game_major_faults_s,$storage.game_blocked_threads,$storage.io_wait_percent) -At $now -CooldownSeconds 15}
+ }
  if($thermalFresh){$cachedTemps=$temps;$adaptive.thermal=$now}else{if($cachedTemps){$temps=$cachedTemps}}
  if($familyFresh){
   $familyElapsed=if($null -ne $previousFamilyAt){($now-$previousFamilyAt).TotalSeconds}else{0}
@@ -538,6 +559,7 @@ while((Get-Date) -lt $until){
  $thermalText=if($null -ne $temps.cpu){'CPU {0:N1}C; GPU {1:N1}C; skin {2:N1}C; battery {3:N1}C' -f $temps.cpu,$temps.gpu,$temps.skin,$temps.battery}else{'Unavailable'}
  $record=[pscustomobject][ordered]@{
   time=$now.ToString('o');container_package=$activePackage;game_process=$gameName;game_pid=$gamePid;backend_indicators=$backendDisplay;surface_updates=$newFrameCount;surface_median_ms=$median;surface_p95_ms=$p95
+  storage_status=$storage.status;storage_iowait_percent=$storage.io_wait_percent;storage_game_major_faults_s=$storage.game_major_faults_s;storage_phone_page_in_mib_s=$storage.phone_page_in_mib_s;storage_game_read_mib_s=$storage.game_read_mib_s;storage_game_blocked_threads=$storage.game_blocked_threads;storage_sampled_at=$storage.sampled_at
   background_cpu_alerts=$background.alerts.Count;app_profile_session=$appProfile.session;app_profile_game=$appProfile.game;app_hud_fps=$appProfile.fps;app_hud_p95_ms=$appProfile.p95_ms;app_profile_status=$appProfile.status
   surface_baseline_ms=$surfaceBaselineMs;surface_slowdown=$surfaceSlowdown;target_fps=$TargetFps
   dxvk_shader_cpu_ms_per_s=$gameThreads.groups.shader.cpu_ms_per_s;dxvk_submit_cpu_ms_per_s=$gameThreads.groups.submit.cpu_ms_per_s;dxvk_other_cpu_ms_per_s=$gameThreads.groups.dxvkOther.cpu_ms_per_s;game_thread_count=$gameThreads.rows.Count
@@ -569,7 +591,8 @@ while((Get-Date) -lt $until){
  $snapshot=[pscustomobject][ordered]@{
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
-  sampling=[pscustomobject]@{slow_interval_seconds=3;thermal_at=$adaptive.thermal.ToString('o');family_at=$adaptive.family.ToString('o');background_at=$adaptive.background.ToString('o');thermal_fresh=$thermalFresh;family_fresh=$familyFresh;background_fresh=$backgroundFresh;collection_ms=[math]::Round($collectionTimer.Elapsed.TotalMilliseconds)}
+  sampling=[pscustomobject]@{slow_interval_seconds=3;storage_at=$adaptive.storage.ToString('o');storage_fresh=$storageFresh;thermal_at=$adaptive.thermal.ToString('o');family_at=$adaptive.family.ToString('o');background_at=$adaptive.background.ToString('o');thermal_fresh=$thermalFresh;family_fresh=$familyFresh;background_fresh=$backgroundFresh;collection_ms=[math]::Round($collectionTimer.Elapsed.TotalMilliseconds)}
+  storage=$storage;storage_history=@($storageHistory.ToArray())
   app_profile=$appProfile
   monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats;collector_state='running';stop_url=$monitorControl.url;resume_url=$monitorControl.resumeUrl;can_resume=$true;control_updated_at=$now.ToString('o')}
   graphics_workers=$gameThreads.groups
