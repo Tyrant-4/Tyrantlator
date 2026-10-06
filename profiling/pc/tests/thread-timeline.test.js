@@ -16,3 +16,6 @@ const context={window:{document:{getElementById:get,createElement:()=>new Elemen
 vm.runInNewContext(fs.readFileSync(require.resolve('../scripts/thread-timeline.js'),'utf8'),context);context.window.renderProfileData(data());now+=2000;context.window.renderProfileData(data());
 assert.match(get('threadTimelineStatus').textContent,/Live.*1 threads/);assert.equal(get('threadTimeline').children[0].children[1].children[2].textContent,'80.0');assert.equal(get('threadTimeline').children[0].children[1].children[1].children[0].children.length,1);
 console.log('PASS: live timeline duplicate/stale rejection, nulls, thread reuse, missing threads, restart reset, bounded history and rendering');
+context.window.renderProfileData({...data(),monitoring:{collector_state:'stopped'}});assert.match(get('threadTimelineStatus').textContent,/Stopped/);
+assert.equal(api.ingest(api.createHistory(),{...data(),monitoring:{collector_state:'stopped'}},now),false);
+console.log('PASS: stopped threads do not extend live history and are labeled frozen');

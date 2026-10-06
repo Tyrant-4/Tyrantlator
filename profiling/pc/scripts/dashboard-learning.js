@@ -8,7 +8,7 @@ const fields=[['HUD FPS','fps','fps'],['App present p95','appP95','ms'],['Game C
 
 const numeric=x=>x!==null&&x!==undefined&&Number.isFinite(Number(x))?Number(x):null;
 
-function identity(d){return [d.game,d.game_pid,d.container,d.backend,d.target_fps,d.app_profile?.session||''].join('|')}
+function identity(d){return [d.session,d.game,d.game_pid,d.container,d.backend,d.target_fps,d.app_profile?.session||''].join('|')}
 
 function sample(d){return {at:d.generated_at,fps:numeric(d.app_profile?.fps),appP95:numeric(d.app_profile?.p95_ms),cpu:numeric(d.cpu?.game_ms_per_s)===null?null:d.cpu.game_ms_per_s/1000,gpu:numeric(d.gpu?.busy_percent),temp:numeric(d.thermal?.cpu_c),ram:numeric(d.memory?.available_mb),surfaceP95:numeric(d.surface?.p95_ms)}}
 
@@ -30,7 +30,7 @@ function save(){try{scope.localStorage.setItem('tyrantlator-comparisons-v1',JSON
 
 function render(){const root=$('comparisonResults');root.replaceChildren();const a=runs.A,b=runs.B;
 
- for(const [slot,r] of Object.entries(runs)){const p=doc.createElement('p');p.textContent=r?`${slot}: ${r.label} · ${r.game} · ${r.samples.length} samples · ${r.duration.toFixed(1)} s · ${new Date(r.saved).toLocaleString()}`:`${slot}: no saved recording`;root.append(p)}
+ for(const [slot,r] of Object.entries(runs)){const p=doc.createElement('p');p.textContent=r?`${slot}: ${r.label} · ${r.game} · ${r.samples.length} samples · ${r.duration.toFixed(1)} s · ${new Date(r.saved).toLocaleString()}`:`${slot}: no baseline or live samples`;root.append(p)}
 
  if(!a&&!b)return;
 
@@ -47,6 +47,8 @@ function render(){const root=$('comparisonResults');root.replaceChildren();const
 function accept(d){
 
  current=d;const age=Date.now()-Date.parse(d.generated_at),key=identity(d);
+ $('pinBaseline').disabled=d.monitoring?.collector_state==='stopped';
+ if(d.monitoring?.collector_state==='stopped'){render();message('Monitoring stopped · comparison frozen. Resume to collect fresh readings.');return}
 
  if(!Number.isFinite(age)||age<0||age>10000||d.game==='Unavailable'){runs.B=null;render();message('Live game readings unavailable. Start the collector and a game.');return}
 
@@ -66,7 +68,7 @@ function accept(d){
 
 function pin(){
 
- if(!current||Date.now()-Date.parse(current.generated_at)>10000||!runs.B||recent.length<5||runs.B.duration<5){message('Need at least five fresh live samples spanning five seconds to pin a useful baseline. Live monitoring continues.');return}
+ if(!current||current.monitoring?.collector_state==='stopped'||Date.now()-Date.parse(current.generated_at)>10000||!runs.B||recent.length<5||runs.B.duration<5){message('Need at least five fresh live samples spanning five seconds to pin a useful baseline. Live monitoring continues.');return}
 
  runs.A={...runs.B,label:$('runLabel').value.trim().slice(0,80)||'Pinned settings',samples:recent.slice()};save();render();message(`Baseline pinned. Live readings keep updating.${storage?' Saved in this browser.':' Export to keep this baseline.'}`)
 
@@ -99,7 +101,7 @@ function cpuQueue(d){
  const data=d.game_threads||{},root=$('cpuQueueRows'),rows=data.queue_rows||[];root.replaceChildren();
  const gpu=numeric(d.gpu?.recent_busy_percent),measured=data.queue_measured||0;
  $('cpuQueueStatus').textContent=`CPU queue counters: ${measured}/${data.total||0} threads measured. GPU busy: ${gpu===null?'Unavailable':gpu.toFixed(1)+'%'}. These are overlapping activities, not parts to add into frame time.`;
- if(!rows.length){root.textContent=data.total?'Scheduler counters unavailable or warming up.':'Waiting for a running game and two live samples.';return}
+ if(!rows.length){root.textContent=d.monitoring?.scheduler_stats_enabled===false?'Scheduler polling is off.':data.total?'Scheduler counters unavailable or warming up.':'Waiting for a running game and two live samples.';return}
  const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Thread / TID','Waiting for CPU ms/s','Running on CPU ms/s']){const th=doc.createElement('th');th.textContent=label;head.append(th)}table.append(head);
  for(const t of rows){const tr=doc.createElement('tr');for(const text of [`${t.name} (${t.tid})`,Number(t.cpu_queue_ms_per_s).toFixed(1),numeric(t.scheduled_ms_per_s)===null?'Unavailable':Number(t.scheduled_ms_per_s).toFixed(1)]){const td=doc.createElement('td');td.textContent=text;tr.append(td)}table.append(tr)}root.append(table);
 }
@@ -119,8 +121,22 @@ $('clearComparisons').onclick=()=>{runs.A=null;save();render();message('Baseline
 
 $('exportComparisons').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,...runs},null,2)],{type:'application/json'}));const a=doc.createElement('a');a.href=url;a.download='tyrantlator-live-comparison.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 
-setInterval(()=>{if(current&&Date.now()-Date.parse(current.generated_at)>10000){runs.B=null;render();$('backgroundStatus').textContent='Paused · these process readings are from the last sample, not live.';$('gameThreadStatus').textContent='Paused · these thread readings are from the last sample, not live.';$('cpuQueueStatus').textContent='Paused: CPU queue readings are from the last sample.';message('Collector paused. Live comparison unavailable; pinned baseline kept.')}},1000);
+setInterval(()=>{
+ if(!current)return;
+ if(current.monitoring?.collector_state==='stopped'){
+  $('backgroundStatus').textContent='Stopped · phone process readings frozen.';
+  $('gameThreadStatus').textContent='Stopped · game thread readings frozen.';
+  $('cpuQueueStatus').textContent='Stopped · CPU queue readings frozen.';
+  message('Monitoring stopped · comparison frozen. Resume to collect fresh readings.');
+ }else if(Date.now()-Date.parse(current.generated_at)>10000){
+  runs.B=null;render();$('pinBaseline').disabled=true;
+  $('backgroundStatus').textContent='Paused · these process readings are from the last sample, not live.';
+  $('gameThreadStatus').textContent='Paused · these thread readings are from the last sample, not live.';
+  $('cpuQueueStatus').textContent='Paused: CPU queue readings are from the last sample.';
+  message('Collector paused. Live comparison unavailable; pinned baseline kept.');
+ }
+},1000);
 
-const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);gameThreads(d);cpuQueue(d);background(d);accept(d)};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
+const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);gameThreads(d);cpuQueue(d);background(d);accept(d);if(d.monitoring?.collector_state==='stopped'){$('backgroundStatus').textContent='Stopped · phone process readings frozen.';$('gameThreadStatus').textContent='Stopped · game thread readings frozen.';$('cpuQueueStatus').textContent='Stopped · CPU queue readings frozen.'}};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
 
 })(typeof window==='undefined'?globalThis:window);
