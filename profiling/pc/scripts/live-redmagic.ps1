@@ -6,9 +6,20 @@
  [string]$ProjectRoot=(Split-Path $PSScriptRoot -Parent),
  [ValidateRange(15,240)][int]$TargetFps=60,
  [string]$LogDirectory='',
+ [switch]$EnableSchedulerStats,
  [string]$DashboardDataPath=''
 )
 $ErrorActionPreference='Stop'
+# Only one collector may poll a phone in this Windows session.
+$collectorMutex=New-Object System.Threading.Mutex($false,('Local\TyrantlatorLiveCollector-'+$Serial))
+$collectorOwnsMutex=$false
+try{
+ try{$collectorOwnsMutex=$collectorMutex.WaitOne(0)}
+ catch [System.Threading.AbandonedMutexException]{$collectorOwnsMutex=$true}
+ if(-not $collectorOwnsMutex){
+  Write-Host 'Live monitoring is already running for this phone. Use the existing dashboard.'
+  return
+ }
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
 . (Join-Path $PSScriptRoot 'read-process-family.ps1')
 . (Join-Path $PSScriptRoot 'read-game-threads.ps1')
@@ -173,13 +184,15 @@ fi
 echo THREADS
 if [ -n "$gamePid" ]; then
  cat /proc/$gamePid/task/*/stat 2>/dev/null
- awk '{print "SCHED", FILENAME, $0}' /proc/$gamePid/task/*/schedstat 2>/dev/null
+ SCHEDULER_SAMPLE_PLACEHOLDER
 fi
 echo BACKGROUND
 top -b -n 1 -m 15 -s 5 -o PID,PPID,UID,S,%CPU,NAME 2>/dev/null
 echo FEXJIT
 tail -n 80 /sdcard/Download/fex-jit.csv 2>/dev/null
 '@
+$schedulerCommand=if($EnableSchedulerStats){'awk ''{print "SCHED", FILENAME, $0}'' /proc/$gamePid/task/*/schedstat 2>/dev/null'}else{':'}
+$shell=$shell.Replace('SCHEDULER_SAMPLE_PLACEHOLDER',$schedulerCommand)
 $shell=$shell.Replace('GAME_PLACEHOLDER',$GameProcess.ToLowerInvariant()).Replace("`r",'')
 while((Get-Date) -lt $until){
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
@@ -508,6 +521,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
+  monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats}
   graphics_workers=$gameThreads.groups
   game_threads=[pscustomobject]@{timeline_complete=($gameThreads.rows.Count -le 512);timeline_rows=@($gameThreads.rows | Select-Object -First 512);total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
@@ -584,5 +598,7 @@ while((Get-Date) -lt $until){
  Write-Host 'Press Ctrl+C to stop.'
  Start-Sleep -Seconds 1
 }
-
-
+}finally{
+ if($collectorOwnsMutex){$collectorMutex.ReleaseMutex()}
+ $collectorMutex.Dispose()
+}
