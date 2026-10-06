@@ -21,6 +21,7 @@ try{
   Write-Host 'Live monitoring is already running for this phone. Use the existing dashboard.'
   return
  }
+. (Join-Path $PSScriptRoot 'adaptive-sampling.ps1')
 . (Join-Path $PSScriptRoot 'monitor-control.ps1')
 $monitorControl=Start-MonitorControl
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
@@ -55,6 +56,7 @@ $dashboardHistory=New-Object 'System.Collections.Generic.List[object]'
 $dashboardEvents=New-Object 'System.Collections.Generic.List[object]'
 $lastEvent=@{}
 $trackedGamePid=$null
+$adaptive=New-AdaptiveSamplingState;$cachedTemps=$null;$family=$null;$background=$null
 $allowedBaseline=@{}
 $surfaceLayer=$null; $activePackage=$Package; $lastFrameReady=[long]0
 $staleSurfaceSamples=0
@@ -127,6 +129,8 @@ grep -E 'MemTotal:|MemAvailable:|SwapTotal:|SwapFree:' /proc/meminfo
 echo SWAPIO
 grep -E '^pswp(in|out) ' /proc/vmstat
 echo THERMAL
+if [ 'THERMAL_DUE' = 1 ]; then
+echo SAMPLED_THERMAL
 for zone in /sys/class/thermal/thermal_zone*; do
  read sensor < "$zone/type" 2>/dev/null || continue
  case "$sensor" in
@@ -136,6 +140,7 @@ for zone in /sys/class/thermal/thermal_zone*; do
    ;;
  esac
 done
+fi
 echo GAME
 gamePid=''
 gameName=''
@@ -169,6 +174,8 @@ case "$gamePid" in
   ;;
 esac
 echo FAMILY
+if [ 'FAMILY_DUE' = 1 ] || [ "$gamePid" != 'CACHED_GAME_PID' ]; then
+echo SAMPLED_FAMILY
 if [ -n "$gamePid" ]; then
  gameUid=$(awk '/^Uid:/ {print $2; exit}' "/proc/$gamePid/status" 2>/dev/null)
  case "$gameUid" in ''|*[!0-9]*) ;; *)
@@ -180,6 +187,7 @@ if [ -n "$gamePid" ]; then
  done
  ;; esac
 fi
+fi
 echo BACKEND
 if [ -n "$gamePid" ]; then
  grep -aioE 'dxvk|vkd3d|d3dvk|d8vk|wined3d' "/proc/$gamePid/maps" 2>/dev/null | sort -u
@@ -190,7 +198,10 @@ if [ -n "$gamePid" ]; then
  SCHEDULER_SAMPLE_PLACEHOLDER
 fi
 echo BACKGROUND
+if [ 'BACKGROUND_DUE' = 1 ] || [ "$gamePid" != 'CACHED_GAME_PID' ]; then
+echo SAMPLED_BACKGROUND
 top -b -n 1 -m 15 -s 5 -o PID,PPID,UID,S,%CPU,NAME 2>/dev/null
+fi
 echo FEXJIT
 tail -n 80 /sdcard/Download/fex-jit.csv 2>/dev/null
 '@
@@ -216,8 +227,13 @@ while((Get-Date) -lt $until){
   $previousCpu=@{};$previousGame=$null;$previousJit=@{};$previousSwap=$null
   $previousAllThreads=@{};$previousThreadsAt=$null;$previousFamily=@{};$previousFamilyAt=$null;$previousBackground=@{}
   $surfaceLayer=$null;$lastFrameReady=[long]0;$staleSurfaceSamples=0;$trackedGamePid=$null;$allowedBaseline=@{}
+  $adaptive=New-AdaptiveSamplingState;$cachedTemps=$null;$family=$null;$background=$null
   $timingHistory.Clear();$gpuRecent.Clear();$dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{}
  }
+ $collectionTimer=[Diagnostics.Stopwatch]::StartNew()
+ $samplePlan=Get-AdaptiveSamplePlan -State $adaptive
+ $cachedPid=if($trackedGamePid -match '^\d+$'){$trackedGamePid}else{''}
+ $sampleShell=$shell.Replace('THERMAL_DUE',[int][bool]$samplePlan.thermal).Replace('FAMILY_DUE',[int][bool]$samplePlan.family).Replace('BACKGROUND_DUE',[int][bool]$samplePlan.background).Replace('CACHED_GAME_PID',$cachedPid)
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
  if($Package -eq 'auto' -and $surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
  $frameTime='Waiting for surface updates';$frameRate='Waiting for surface updates';$newFrameCount=0
@@ -267,7 +283,7 @@ while((Get-Date) -lt $until){
   $sampleProcess=[Diagnostics.Process]::Start($sampleInfo)
   $sampleOut=$sampleProcess.StandardOutput.ReadToEndAsync()
   $sampleError=$sampleProcess.StandardError.ReadToEndAsync()
-  $sampleProcess.StandardInput.Write(($shell+$appRead+"`n").Replace("`r",''))
+  $sampleProcess.StandardInput.Write(($sampleShell+$appRead+"`n").Replace("`r",''))
   $sampleProcess.StandardInput.Close();$sampleProcess.WaitForExit()
   $raw=@(($sampleOut.GetAwaiter().GetResult()+"`n"+$sampleError.GetAwaiter().GetResult()) -split '\r?\n')
   $adbExit=$sampleProcess.ExitCode;$sampleProcess.Dispose()
@@ -285,8 +301,12 @@ while((Get-Date) -lt $until){
  $backgroundLines=New-Object 'System.Collections.Generic.List[string]'
  $familyLines=New-Object 'System.Collections.Generic.List[string]'
  $appJson='';$deviceElapsedMs=0
+ $thermalFresh=$false;$familyFresh=$false;$backgroundFresh=$false
  foreach($item in $raw){
   $line="${item}".Trim()
+  if($line -eq 'SAMPLED_THERMAL'){$thermalFresh=$true;continue}
+  if($line -eq 'SAMPLED_FAMILY'){$familyFresh=$true;continue}
+  if($line -eq 'SAMPLED_BACKGROUND'){$backgroundFresh=$true;continue}
   if($line -in @('CPU','FREQ','LIMIT','GPU','MEM','SWAPIO','THERMAL','WINE','GAME','FAMILY','BACKEND','THREADS','BACKGROUND','FEXJIT','APPPROFILE','UPTIME')){$section=$line;continue}
   switch($section){
    FAMILY {[void]$familyLines.Add($line)}
@@ -364,19 +384,25 @@ while((Get-Date) -lt $until){
    }
   }
  }
- if($gamePid -ne 'Unavailable' -and $gamePid -ne $trackedGamePid){
+ if($gamePid -ne $trackedGamePid){
+  $family=$null;$background=$null;$previousFamily=@{};$previousFamilyAt=$null
   $trackedGamePid=$gamePid;$previousAllThreads=@{};$previousThreadsAt=$null;$previousBackground=@{};$previousGame=$null;$gpuRecent.Clear();$allowedBaseline=@{}
   $dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{};$timingHistory.Clear()
   $median=$null;$p95=$null;$newFrameCount=0;$spike33=0;$spike50=0
-  $frameTime='New game detected; warming up';$frameRate='Warming up'
+  $frameTime=if($gamePid -eq 'Unavailable'){'Waiting for game process'}else{'New game detected; warming up'};$frameRate='Warming up'
  }
  $appProfile=ConvertFrom-AppProfile -Json $appJson -Package $activePackage -DeviceElapsedMs $deviceElapsedMs
  $now=Get-Date
- $familyElapsed=if($null -ne $previousFamilyAt){($now-$previousFamilyAt).TotalSeconds}else{0}
- $family=ConvertFrom-ProcessFamily -Lines $familyLines.ToArray() -GamePid $gamePid -Previous $previousFamily -ElapsedSeconds $familyElapsed
- $previousFamily=$family.previous;$previousFamilyAt=$now
- $background=ConvertFrom-BackgroundCpu -Lines $backgroundLines.ToArray() -GamePid $gamePid -Package $activePackage -Family $family.rows -Previous $previousBackground -At $now
- $previousBackground=$background.previous
+ if($thermalFresh){$cachedTemps=$temps;$adaptive.thermal=$now}else{if($cachedTemps){$temps=$cachedTemps}}
+ if($familyFresh){
+  $familyElapsed=if($null -ne $previousFamilyAt){($now-$previousFamilyAt).TotalSeconds}else{0}
+  $family=ConvertFrom-ProcessFamily -Lines $familyLines.ToArray() -GamePid $gamePid -Previous $previousFamily -ElapsedSeconds $familyElapsed
+  $previousFamily=$family.previous;$previousFamilyAt=$now;$adaptive.family=$now
+ }
+ if($backgroundFresh){
+  $background=ConvertFrom-BackgroundCpu -Lines $backgroundLines.ToArray() -GamePid $gamePid -Package $activePackage -Family $family.rows -Previous $previousBackground -At $now
+  $previousBackground=$background.previous;$adaptive.background=$now
+ }
  $cpuWork=if($gamePid -eq 'Unavailable'){'Waiting for game process'}else{'Warming up: needs two live samples'};$gameCpuMsPerUpdate=$null;$jitMs=$null
  if($null -ne $swapIn -and $null -ne $swapOut){
   if($previousSwap){
@@ -543,6 +569,7 @@ while((Get-Date) -lt $until){
  $snapshot=[pscustomobject][ordered]@{
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
+  sampling=[pscustomobject]@{slow_interval_seconds=3;thermal_at=$adaptive.thermal.ToString('o');family_at=$adaptive.family.ToString('o');background_at=$adaptive.background.ToString('o');thermal_fresh=$thermalFresh;family_fresh=$familyFresh;background_fresh=$backgroundFresh;collection_ms=[math]::Round($collectionTimer.Elapsed.TotalMilliseconds)}
   app_profile=$appProfile
   monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats;collector_state='running';stop_url=$monitorControl.url;resume_url=$monitorControl.resumeUrl;can_resume=$true;control_updated_at=$now.ToString('o')}
   graphics_workers=$gameThreads.groups

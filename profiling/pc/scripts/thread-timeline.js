@@ -35,5 +35,6 @@ function render(){
   td.append(strip);tr.append(td);const latest=row.points.at(-1);for(const text of [latest?.cpu===null||!latest?'—':latest.cpu.toFixed(1),latest?.queue===null||!latest?'—':latest.queue.toFixed(1),latest?`${latest.state} / C${latest.last_core}`:'Not sampled']){const c=doc.createElement('td');c.textContent=text;tr.append(c)}table.append(tr)
  }root.append(table);
 }
-const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);last=d;if(ingest(history,d)||d.monitoring?.collector_state==='stopped')render()};setInterval(()=>{if(last&&Date.now()-Date.parse(last.generated_at)>10000)render()},2000);if(scope.profileData)scope.renderProfileData(scope.profileData);
+function paint(){if(scope.TyrantDashboardRender)scope.TyrantDashboardRender.offer('cpu','timeline',last,render);else render()}
+const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);last=d;if(ingest(history,d)||d.monitoring?.collector_state==='stopped')paint()};setInterval(()=>{if(last&&Date.now()-Date.parse(last.generated_at)>10000)paint()},2000);if(scope.profileData)scope.renderProfileData(scope.profileData);
 })(typeof window==='undefined'?globalThis:window);

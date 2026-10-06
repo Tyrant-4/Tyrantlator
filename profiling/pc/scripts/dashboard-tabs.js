@@ -6,7 +6,8 @@
   for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;document.getElementById(item.getAttribute('aria-controls')).hidden=!selected}
   if(focus)tab.focus();
   try{localStorage.setItem('tyrantlator-profiler-tab',tab.id)}catch{}
-  window.dispatchEvent(new Event('resize'));
+  window.TyrantDashboardRender?.activate(tab.getAttribute('aria-controls').replace('panel-',''));
+  window.dispatchEvent(new Event('tyranttabchange'));
  }
  for(const [index,tab] of tabs.entries()){
   tab.onclick=()=>select(tab);

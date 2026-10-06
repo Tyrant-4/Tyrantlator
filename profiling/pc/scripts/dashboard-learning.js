@@ -28,7 +28,9 @@ function message(text){$('comparisonStatus').textContent=text}
 
 function save(){try{scope.localStorage.setItem('tyrantlator-comparisons-v1',JSON.stringify({version:1,...runs}))}catch{storage=false}}
 
-function render(){const root=$('comparisonResults');root.replaceChildren();const a=runs.A,b=runs.B;
+function defer(view,key,data,fn,revision){if(scope.TyrantDashboardRender)scope.TyrantDashboardRender.offer(view,key,data,fn,revision);else fn()}
+function render(){defer('compare','comparison',current,drawComparison,[current?.session,current?.generated_at,current?.monitoring?.collector_state,runs.A?.saved,runs.A?.label,!!runs.B].join('|'))}
+function drawComparison(){const root=$('comparisonResults');root.replaceChildren();const a=runs.A,b=runs.B;
 
  for(const [slot,r] of Object.entries(runs)){const p=doc.createElement('p');p.textContent=r?`${slot}: ${r.label} · ${r.game} · ${r.samples.length} samples · ${r.duration.toFixed(1)} s · ${new Date(r.saved).toLocaleString()}`:`${slot}: no baseline or live samples`;root.append(p)}
 
@@ -56,7 +58,8 @@ function accept(d){
 
  recent=recent.filter(s=>Date.now()-Date.parse(s.at)<=30000);
 
- if(!recent.some(s=>s.at===d.generated_at))recent.push(sample(d));
+ if(recent.some(s=>s.at===d.generated_at))return;
+ recent.push(sample(d));
 
  const duration=recent.length>1?(Date.parse(recent.at(-1).at)-Date.parse(recent[0].at))/1000:0;
 
@@ -76,7 +79,7 @@ function pin(){
 
 function background(d){
 
- const data=d.background_cpu||{},root=$('backgroundProcesses'),alerts=$('backgroundAlerts');root.replaceChildren();alerts.replaceChildren();$('backgroundStatus').textContent=data.status||'Phone-wide readings unavailable. Start the updated live collector.';
+ const data=d.background_cpu||{},root=$('backgroundProcesses'),alerts=$('backgroundAlerts');root.replaceChildren();alerts.replaceChildren();$('backgroundStatus').textContent=(data.status||'Phone-wide readings unavailable. Start the updated live collector.')+(d.sampling?.background_at?' · sampled '+new Date(d.sampling.background_at).toLocaleTimeString():'');
 
  for(const a of data.alerts||[]){const box=doc.createElement('div');box.className='event';const title=doc.createElement('b'),detail=doc.createElement('p');title.textContent=`${a.title}: ${a.name} (${a.pid})`;detail.className='detail';detail.textContent=`${a.cpu_cores.toFixed(2)} busy cores · observed for ${a.seconds} s. ${a.detail}`;box.append(title,detail);alerts.append(box)}
 
@@ -105,7 +108,7 @@ function cpuQueue(d){
  const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Thread / TID','Waiting for CPU ms/s','Running on CPU ms/s']){const th=doc.createElement('th');th.textContent=label;head.append(th)}table.append(head);
  for(const t of rows){const tr=doc.createElement('tr');for(const text of [`${t.name} (${t.tid})`,Number(t.cpu_queue_ms_per_s).toFixed(1),numeric(t.scheduled_ms_per_s)===null?'Unavailable':Number(t.scheduled_ms_per_s).toFixed(1)]){const td=doc.createElement('td');td.textContent=text;tr.append(td)}table.append(tr)}root.append(table);
 }
-function family(d){const root=$('processFamily');root.replaceChildren();const list=d.process_family||[];if(!list.length){root.textContent='No process family available. Start a game with the updated live collector.';return}
+function family(d){const root=$('processFamily');root.replaceChildren();const stamp=$('processFamilyStatus');if(stamp)stamp.textContent=d.sampling?.family_at?'Sampled '+new Date(d.sampling.family_at).toLocaleTimeString():'Process inventory sample time unavailable';const list=d.process_family||[];if(!list.length){root.textContent='No process family available. Start a game with the updated live collector.';return}
 
  const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Process / PID','Relationship','State','CPU cores','RAM MB','Parent PID']){const cell=doc.createElement('th');cell.textContent=label;head.append(cell)}table.append(head);
 
@@ -137,6 +140,11 @@ setInterval(()=>{
  }
 },1000);
 
-const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);gameThreads(d);cpuQueue(d);background(d);accept(d);if(d.monitoring?.collector_state==='stopped'){$('backgroundStatus').textContent='Stopped · phone process readings frozen.';$('gameThreadStatus').textContent='Stopped · game thread readings frozen.';$('cpuQueueStatus').textContent='Stopped · CPU queue readings frozen.'}};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
+const original=scope.renderProfileData;scope.renderProfileData=d=>{
+ original(d);accept(d);
+ const state=d.monitoring?.collector_state,processRevision=[d.session,d.sampling?.family_at||d.generated_at,d.sampling?.background_at||d.generated_at,state,scope.TyrantDashboardState?.state(d)].join('|');
+ defer('processes','inventory',d,()=>{family(d);background(d);if(state==='stopped')$('backgroundStatus').textContent='Stopped · phone process readings frozen.'},processRevision);
+ defer('cpu','threads',d,()=>{gameThreads(d);cpuQueue(d);if(state==='stopped'){$('gameThreadStatus').textContent='Stopped · game thread readings frozen.';$('cpuQueueStatus').textContent='Stopped · CPU queue readings frozen.'}});
+};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
 
 })(typeof window==='undefined'?globalThis:window);
