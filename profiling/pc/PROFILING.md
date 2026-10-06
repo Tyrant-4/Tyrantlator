@@ -1,8 +1,8 @@
 # REDMAGIC PC profiling
 
-## Tyrantlator fork integration (phase 1)
+## Tyrantlator fork integration
 
-The same dashboard and ADB collector now optionally read `Android/data/<active package>/files/tyrantlator-profile.json` from a custom Tyrantlator build. Add `TYRANTLATOR_PROFILE=1` to one game's environment and enable its existing HUD / Show FPS, then relaunch. The new app-frame panel shows HUD presents separately from SurfaceFlinger updates. Existing installed builds continue working with this panel unavailable. Stale, stopped or foreign app exports never become live readings. See `work/bannerlator-custom/profiling/README.md` for the source, limits and test steps. Exact native layer and GPU execution timings remain future work.
+The same dashboard and ADB collector optionally read `Android/data/<active package>/files/tyrantlator-profile.json` from Tyrantlator. Profiling build 3 adds **Live profiling** beside **Show HUD** in the in-game HUD tab. Start/stop it immediately without restarting; its choice is saved per game. It also works with Show HUD off. Older profile-2 builds require Show HUD and a relaunch after editing `TYRANTLATOR_PROFILE`. The app-frame panel shows game presents separately from SurfaceFlinger updates. Stale, stopped or foreign exports never become live readings. See `work/bannerlator-custom/profiling/README.md` for source, limits and test steps. Exact native-layer and GPU execution timings remain future work.
 
 ## Current live dashboard
 
@@ -140,7 +140,7 @@ Installed DXVK 3.1 D3D11 binary contains drawcalls, submissions, pipelines, comp
 ## Collector isolation
 Only one live collector can run for a phone in a Windows session. Reopening `live.cmd` opens the dashboard and reports that monitoring is already running instead of adding duplicate phone polling. Stop the existing collector before changing its options. The lock is released automatically on exit, including forced process termination.
 
-Scheduler-counter polling is opt-in: run `live.cmd -EnableSchedulerStats` to collect runnable queue wait. The default keeps CPU work and graphics-worker activity live without scheduler reads. Missing queue values with that option off are expected. Keep `TYRANTLATOR_PROFILE=1` and Show HUD enabled for app frame readings.
+Scheduler-counter polling is opt-in: run `live.cmd -EnableSchedulerStats` to collect runnable queue wait. The default keeps CPU work and graphics-worker activity live without scheduler reads. Missing queue values with that option off are expected. Enable Live profiling for app frame readings; build 3 supports a hidden HUD.
 
 A steady Origins comparison on 2026-10-06 measured average app HUD FPS of 37.52 with scheduler polling off, 37.67 on, and 37.67 off again. That short test did not reproduce the reported slowdown and does not prove zero overhead or identify the earlier cause. Two simultaneous PC collectors were found and reduced to one before the comparison.
 ## Stop live monitoring

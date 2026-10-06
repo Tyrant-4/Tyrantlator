@@ -1,4 +1,4 @@
-# Tyrantlator profiling, phase 1
+# Tyrantlator live profiling
 
 This extends the existing PC dashboard and ADB collector. It reuses Bannerlator's shared `FpsCounter`; CPU, memory, thermal, GPU-busy, named Wine/graphics workers and the optional FEX JIT probe keep their existing collection methods. No second dashboard or replacement collector is required.
 
@@ -31,7 +31,7 @@ Reanalyze an existing trace with PowerShell 7: `scripts/deep-profile.ps1 -RunDir
 
 `pc/` contains the existing Windows dashboard and collector with this additive integration. In the current workspace, canonical files remain at `C:\Android-PC-Emulator\dashboard.html` and `scripts/`; do not maintain a second live instance. The fork copy versions those sources together with the Android change. Copy the `pc/` files into a workspace containing `platform-tools-latest-windows/platform-tools/adb.exe`; pass `-Serial <device>` if needed. Historical `PROFILING.md` refers to additional tools already installed in the original workspace.
 
-Run `powershell -NoProfile -File pc/tests/app-profile.Tests.ps1` to verify freshness and identity rejection. `tests/exporter/run.ps1` compiles the real exporter and frame counter with JVM Android shims and the existing org.json 20231013 dependency; supply `-JavaHome`, `-JsonJar` and `-OutputDirectory`. It checks cancellation, no writes while off, fresh/idempotent sessions, rapid toggles, idle source and teardown; it does not simulate Android rendering. Build APKs through **CI Build (artifacts only)** on this branch for all three flavors. On the phone, check Live profiling on with Show HUD off still supplies fresh frame data, off stops writes after its final marker, resume creates a new session, and relaunch remembers the game's choice. Compare exporter-on and exporter-off in the same scene. No new logcat tag is required: local JSON is the diagnostic interface.
+Run `powershell -NoProfile -File pc/tests/app-profile.Tests.ps1` to verify freshness and identity rejection. `tests/exporter/run.ps1` compiles the real exporter and frame counter with JVM Android shims and the existing org.json 20231013 dependency; supply `-JavaHome`, `-JsonJar` and `-OutputDirectory`. It checks cancellation, no writes while off, fresh/idempotent sessions, rapid toggles, idle source and teardown; it does not simulate Android rendering. Build the PUBG APK through **CI Build (artifacts only)** on this branch; this fork defaults to PUBG only. On the phone, check Live profiling on with Show HUD off still supplies fresh frame data, off stops writes after its final marker, resume creates a new session, and relaunch remembers the game's choice. Compare exporter-on and exporter-off in the same scene. No new logcat tag is required: local JSON is the diagnostic interface.
 
 ## Live dashboard learning tools
 

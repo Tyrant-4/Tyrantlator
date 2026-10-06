@@ -12,9 +12,9 @@ function ConvertFrom-AppProfile {
   if($age -lt -1000 -or $age -gt 5000){$result.status='Stale app export';return $result}
   $result.session=$data.session;$result.game=$data.game;$result.container_id=$data.container_id;$result.display_backend=$data.display_backend
   if($data.status -eq 'stopped'){$result.status='App profiling session ended';return $result}
-  if($data.status -eq 'idle'){$result.status='No recent HUD frame (idle, hidden HUD, or unbound window)';return $result}
+  if($data.status -eq 'idle'){$result.status='No recent app frame (idle or unbound window)';return $result}
   $frameAgeMs=[double]$data.frame_age_ms
-  if($data.status -ne 'active' -or $null -eq $data.frame_age_ms -or [double]::IsNaN($frameAgeMs) -or [double]::IsInfinity($frameAgeMs) -or $frameAgeMs -lt 0 -or $frameAgeMs+$age -gt 1500){$result.status='No recent HUD frame';return $result}
+  if($data.status -ne 'active' -or $null -eq $data.frame_age_ms -or [double]::IsNaN($frameAgeMs) -or [double]::IsInfinity($frameAgeMs) -or $frameAgeMs -lt 0 -or $frameAgeMs+$age -gt 1500){$result.status='No recent app frame';return $result}
   $fps=[double]$data.fps
   if($null -eq $data.fps -or [double]::IsNaN($fps) -or [double]::IsInfinity($fps) -or $fps -lt 0){throw 'Invalid FPS'}
   $values=@($data.intervals_ms)
@@ -22,7 +22,7 @@ function ConvertFrom-AppProfile {
   foreach($value in $values){if($null -eq $value -or [double]::IsNaN([double]$value) -or [double]::IsInfinity([double]$value) -or [double]$value -le 0 -or [double]$value -ge 10000){throw 'Invalid interval'}}
   $result.fps=$fps;$result.intervals_ms=@($values | ForEach-Object {[double]$_})
   if($values.Count -ge 2){$sorted=@($result.intervals_ms | Sort-Object);$result.p95_ms=$sorted[[int][math]::Round(0.95*($sorted.Count-1))]}
-  $result.status='Live app HUD presents (millisecond clock; latest 120 intervals)'
+  $result.status='Live app presents (millisecond clock; latest 120 intervals)'
  } catch {$result.status='Invalid app export; waiting for a valid snapshot'}
  return $result
 }
