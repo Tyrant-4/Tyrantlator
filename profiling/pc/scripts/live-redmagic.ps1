@@ -198,7 +198,26 @@ $schedulerCommand=if($EnableSchedulerStats){'awk ''{print "SCHED", FILENAME, $0}
 $shell=$shell.Replace('SCHEDULER_SAMPLE_PLACEHOLDER',$schedulerCommand)
 $shell=$shell.Replace('GAME_PLACEHOLDER',$GameProcess.ToLowerInvariant()).Replace("`r",'')
 while((Get-Date) -lt $until){
- if(Receive-MonitorStop -Control $monitorControl){break}
+ if((Receive-MonitorCommand -Control $monitorControl) -eq 'stop' -and $snapshot){
+  $pausedAt=Get-Date;$heartbeatAt=[datetime]::MinValue
+  $snapshot.monitoring.collector_state='stopped'
+  while($true){
+   if((Receive-MonitorCommand -Control $monitorControl) -eq 'resume'){break}
+   if(((Get-Date)-$heartbeatAt).TotalSeconds -ge 2){
+    $snapshot.monitoring.control_updated_at=(Get-Date).ToString('o')
+    Write-MonitorSnapshot -Snapshot $snapshot -Path $DashboardDataPath
+    $heartbeatAt=Get-Date
+   }
+   Start-Sleep -Milliseconds 250
+  }
+  $until=$until.Add((Get-Date)-$pausedAt)
+  $sessionId=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
+  $logPath=Join-Path $LogDirectory ('redmagic-'+$sessionId+'.csv')
+  $previousCpu=@{};$previousGame=$null;$previousJit=@{};$previousSwap=$null
+  $previousAllThreads=@{};$previousThreadsAt=$null;$previousFamily=@{};$previousFamilyAt=$null;$previousBackground=@{}
+  $surfaceLayer=$null;$lastFrameReady=[long]0;$staleSurfaceSamples=0;$trackedGamePid=$null;$allowedBaseline=@{}
+  $timingHistory.Clear();$gpuRecent.Clear();$dashboardHistory.Clear();$dashboardEvents.Clear();$lastEvent=@{}
+ }
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
  if($Package -eq 'auto' -and $surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
  $frameTime='Waiting for surface updates';$frameRate='Waiting for surface updates';$newFrameCount=0
@@ -525,7 +544,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
-  monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats;collector_state='running';stop_url=$monitorControl.url}
+  monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats;collector_state='running';stop_url=$monitorControl.url;resume_url=$monitorControl.resumeUrl;can_resume=$true;control_updated_at=$now.ToString('o')}
   graphics_workers=$gameThreads.groups
   game_threads=[pscustomobject]@{timeline_complete=($gameThreads.rows.Count -le 512);timeline_rows=@($gameThreads.rows | Select-Object -First 512);total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
@@ -607,6 +626,7 @@ while((Get-Date) -lt $until){
   $monitorControl.listener.Stop()
   if($snapshot){
    $snapshot.monitoring.collector_state='stopped'
+   $snapshot.monitoring.can_resume=$false
    try{
     $json=$snapshot | ConvertTo-Json -Depth 8 -Compress
     [IO.File]::WriteAllText($DashboardDataPath,('window.profileData='+$json+';if(window.renderProfileData){window.renderProfileData(window.profileData);}'),(New-Object Text.UTF8Encoding($false)))
