@@ -5,7 +5,12 @@
 }
 function ConvertFrom-GameThreads {
  param([string[]]$Lines,[hashtable]$Previous=@{},[double]$ElapsedSeconds=0)
- $current=@{}
+ $current=@{};$schedulers=@{}
+ foreach($line in $Lines){
+  if($line -match '^SCHED /proc/\d+/task/(\d+)/schedstat (\d+) (\d+) (\d+)$'){
+   $schedulers[$Matches[1]]=@{run=[double]$Matches[2];wait=[double]$Matches[3];slices=[double]$Matches[4]}
+  }
+ }
  $rows=@(foreach($line in $Lines){
   if($line -notmatch '^(\d+) \((.+)\) (\S) (.+)$'){continue}
   $id=$Matches[1];$name=$Matches[2];$state=$Matches[3];$fields=$Matches[4] -split '\s+'
@@ -18,8 +23,19 @@ function ConvertFrom-GameThreads {
    $delta=$ticks-$Previous[$id].ticks
    if($delta -ge 0){$rate=10*$delta/$ElapsedSeconds;$status='Measured between live samples'}else{$status='Unavailable: CPU counter reset'}
   }
-  $current[$id]=@{ticks=$ticks;start=$start;type=$type}
-  [pscustomobject]@{tid=[int]$id;name=$name;state=$state;last_core=$lastCore;role=$role;type=$type;cpu_ms_per_s=$rate;cpu_cores=$(if($null -ne $rate){$rate/1000}else{$null});cpu_percent=$(if($null -ne $rate){$rate/10}else{$null});status=$status}
+  $queue=$null;$scheduled=$null;$queueStatus='Unavailable: scheduler counters not readable'
+  $sched=$schedulers[$id]
+  if($sched){
+   $queueStatus='Warming up: needs two scheduler samples'
+   if($ElapsedSeconds -gt 0 -and $Previous.ContainsKey($id) -and $Previous[$id].start -eq $start -and $Previous[$id].scheduler){
+    $old=$Previous[$id].scheduler;$runDelta=$sched.run-$old.run;$waitDelta=$sched.wait-$old.wait
+    if($runDelta -lt 0 -or $waitDelta -lt 0 -or $sched.slices -lt $old.slices){$queueStatus='Unavailable: scheduler counter reset'}
+    elseif($sched.run -eq 0 -and $sched.wait -eq 0 -and $sched.slices -eq 0){$queueStatus='Unavailable: scheduler counters inactive'}
+    else{$queue=$waitDelta/1000000/$ElapsedSeconds;$scheduled=$runDelta/1000000/$ElapsedSeconds;$queueStatus='Measured runnable wait; excludes sleeping and blocked waits'}
+   }
+  }
+  $current[$id]=@{ticks=$ticks;start=$start;type=$type;scheduler=$sched}
+  [pscustomobject]@{tid=[int]$id;name=$name;state=$state;last_core=$lastCore;role=$role;type=$type;cpu_ms_per_s=$rate;cpu_cores=$(if($null -ne $rate){$rate/1000}else{$null});cpu_percent=$(if($null -ne $rate){$rate/10}else{$null});status=$status;cpu_queue_ms_per_s=$queue;scheduled_ms_per_s=$scheduled;queue_status=$queueStatus}
  })
  $groups=@{}
  foreach($type in @('shader','submit','dxvkOther','vkd3d','d8vk','wineInGame')){

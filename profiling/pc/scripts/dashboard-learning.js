@@ -91,9 +91,17 @@ function background(d){
 function gameThreads(d){
  const data=d.game_threads||{},list=data.rows||[],root=$('gameThreadRows');root.replaceChildren();$('gameThreadStatus').textContent=`${data.status||'Start the updated collector to see game threads.'} · showing ${list.length}/${data.total||0} threads · ${data.measured||0} with CPU deltas`;
  if(!list.length){root.textContent='No readable game thread counters.';return}
- const table=doc.createElement('table');table.className='deep-table';const header=doc.createElement('tr');for(const label of ['Thread / TID','Suggested role','CPU %','CPU ms/s','Busy cores','Observed state','Last CPU']){const th=doc.createElement('th');th.textContent=label;header.append(th)}table.append(header);
+ const table=doc.createElement('table');table.className='deep-table';const header=doc.createElement('tr');for(const label of ['Thread / TID','Suggested role','CPU %','CPU ms/s','Busy cores','Observed state','Last CPU','CPU queue ms/s']){const th=doc.createElement('th');th.textContent=label;header.append(th)}table.append(header);
  const states={R:'Running or ready',S:'Sleeping',D:'Blocked wait',Z:'Exited',I:'Idle',T:'Stopped',t:'Tracing stop'};
- for(const t of list){const row=doc.createElement('tr'),valid=t.cpu_ms_per_s!==null&&t.cpu_ms_per_s!==undefined;for(const text of [`${t.name} (${t.tid})`,t.role==='Unknown'?'Unknown':t.role+' (inferred)',valid?Number(t.cpu_percent).toFixed(1):t.status,valid?Number(t.cpu_ms_per_s).toFixed(0):'—',valid?Number(t.cpu_cores).toFixed(2):'—',states[t.state]||t.state,t.last_core>=0?'C'+t.last_core:'Unavailable']){const cell=doc.createElement('td');cell.textContent=text;row.append(cell)}table.append(row)}root.append(table)
+ for(const t of list){const row=doc.createElement('tr'),valid=t.cpu_ms_per_s!==null&&t.cpu_ms_per_s!==undefined;for(const text of [`${t.name} (${t.tid})`,t.role==='Unknown'?'Unknown':t.role+' (inferred)',valid?Number(t.cpu_percent).toFixed(1):t.status,valid?Number(t.cpu_ms_per_s).toFixed(0):'—',valid?Number(t.cpu_cores).toFixed(2):'—',states[t.state]||t.state,t.last_core>=0?'C'+t.last_core:'Unavailable',numeric(t.cpu_queue_ms_per_s)===null?(t.queue_status||'Unavailable'):Number(t.cpu_queue_ms_per_s).toFixed(1)]){const cell=doc.createElement('td');cell.textContent=text;row.append(cell)}table.append(row)}root.append(table)
+}
+function cpuQueue(d){
+ const data=d.game_threads||{},root=$('cpuQueueRows'),rows=data.queue_rows||[];root.replaceChildren();
+ const gpu=numeric(d.gpu?.recent_busy_percent),measured=data.queue_measured||0;
+ $('cpuQueueStatus').textContent=`CPU queue counters: ${measured}/${data.total||0} threads measured. GPU busy: ${gpu===null?'Unavailable':gpu.toFixed(1)+'%'}. These are overlapping activities, not parts to add into frame time.`;
+ if(!rows.length){root.textContent=data.total?'Scheduler counters unavailable or warming up.':'Waiting for a running game and two live samples.';return}
+ const table=doc.createElement('table');table.className='deep-table';const head=doc.createElement('tr');for(const label of ['Thread / TID','Waiting for CPU ms/s','Running on CPU ms/s']){const th=doc.createElement('th');th.textContent=label;head.append(th)}table.append(head);
+ for(const t of rows){const tr=doc.createElement('tr');for(const text of [`${t.name} (${t.tid})`,Number(t.cpu_queue_ms_per_s).toFixed(1),numeric(t.scheduled_ms_per_s)===null?'Unavailable':Number(t.scheduled_ms_per_s).toFixed(1)]){const td=doc.createElement('td');td.textContent=text;tr.append(td)}table.append(tr)}root.append(table);
 }
 function family(d){const root=$('processFamily');root.replaceChildren();const list=d.process_family||[];if(!list.length){root.textContent='No process family available. Start a game with the updated live collector.';return}
 
@@ -113,6 +121,6 @@ $('exportComparisons').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON
 
 setInterval(()=>{if(current&&Date.now()-Date.parse(current.generated_at)>10000){runs.B=null;render();$('backgroundStatus').textContent='Paused · these process readings are from the last sample, not live.';$('gameThreadStatus').textContent='Paused · these thread readings are from the last sample, not live.';message('Collector paused. Live comparison unavailable; pinned baseline kept.')}},1000);
 
-const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);gameThreads(d);background(d);accept(d)};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
+const original=scope.renderProfileData;scope.renderProfileData=d=>{original(d);family(d);gameThreads(d);cpuQueue(d);background(d);accept(d)};render();if(scope.profileData)scope.renderProfileData(scope.profileData);
 
 })(typeof window==='undefined'?globalThis:window);

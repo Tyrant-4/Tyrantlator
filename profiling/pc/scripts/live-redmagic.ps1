@@ -173,6 +173,7 @@ fi
 echo THREADS
 if [ -n "$gamePid" ]; then
  cat /proc/$gamePid/task/*/stat 2>/dev/null
+ awk '{print "SCHED", FILENAME, $0}' /proc/$gamePid/task/*/schedstat 2>/dev/null
 fi
 echo BACKGROUND
 top -b -n 1 -m 15 -s 5 -o PID,PPID,UID,S,%CPU,NAME 2>/dev/null
@@ -506,7 +507,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
-  game_threads=[pscustomobject]@{total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
+  game_threads=[pscustomobject]@{total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
   background_cpu=[pscustomobject]@{status=$background.status;processes=$background.processes;alerts=$background.alerts}
   assessment=$assessment;evidence=$evidence;next_check=$nextCheck

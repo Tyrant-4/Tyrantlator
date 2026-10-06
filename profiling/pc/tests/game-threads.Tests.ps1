@@ -17,3 +17,17 @@ $missing=ConvertFrom-GameThreads -Lines @('broken')
 if($missing.rows.Count -ne 0 -or $missing.groups.submit.status -ne 'No named worker seen'){throw 'Missing worker fabricated'}
 if((Format-CpuWork -MsPerSecond 500) -notmatch '0.50 busy cores'){throw 'CPU display units incorrect'}
 'PASS: normalized rates, idle vs warmup, last core, TID reuse, grouping and partial coverage'
+function SchedLine($tid,$run,$wait,$slices=10){"SCHED /proc/500/task/$tid/schedstat $run $wait $slices"}
+$q1=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'EngineWindowThr' 100),(SchedLine 10 1000000000 200000000))
+$q2=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'EngineWindowThr' 200),(SchedLine 10 2000000000 600000000 20)) -Previous $q1.previous -ElapsedSeconds 2
+if($q2.rows[0].cpu_queue_ms_per_s -ne 200 -or $q2.rows[0].scheduled_ms_per_s -ne 500){throw 'Scheduler rates not normalized'}
+$qr=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'EngineWindowThr' 300 999),(SchedLine 10 3000000000 900000000 30)) -Previous $q1.previous -ElapsedSeconds 2
+if($null -ne $qr.rows[0].cpu_queue_ms_per_s){throw 'Reused thread inherited queue wait'}
+$zero1=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'worker' 100),(SchedLine 10 0 0 0))
+$zero2=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'worker' 200),(SchedLine 10 0 0 0)) -Previous $zero1.previous -ElapsedSeconds 2
+if($null -ne $zero2.rows[0].cpu_queue_ms_per_s -or $zero2.rows[0].queue_status -notmatch 'inactive'){throw 'Disabled counters presented as no wait'}
+$reset=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'worker' 200),(SchedLine 10 900000000 100000000)) -Previous $q1.previous -ElapsedSeconds 2
+if($null -ne $reset.rows[0].cpu_queue_ms_per_s -or $reset.rows[0].queue_status -notmatch 'reset'){throw 'Counter reset fabricated queue rate'}
+$missingSched=ConvertFrom-GameThreads -Lines @((ThreadLine 10 'worker' 200)) -Previous $q1.previous -ElapsedSeconds 2
+if($null -ne $missingSched.rows[0].cpu_queue_ms_per_s -or $missingSched.rows[0].queue_status -notmatch 'not readable'){throw 'Missing scheduler source fabricated queue rate'}
+'PASS: scheduler queue units, TID reuse, inactive counters, resets and missing-source handling'
