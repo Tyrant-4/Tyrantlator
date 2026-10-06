@@ -20,6 +20,7 @@ button,input{font:inherit;color:var(--text);background:var(--panel2);border:1px 
 <body>
 <div class="wrap">
  <header><div><div class="eyebrow">PC-assisted profiling · REDMAGIC</div><h1>Live game performance</h1><p class="sub">Local readings from your phone, with a rolling history of slowdowns.</p></div><div id="status" class="status"><span class="dot"></span><span id="statusText">Waiting for sampler</span></div></header>
+ <section class="controls" style="margin-bottom:18px"><button id="stopMonitoring" disabled>Stop monitoring</button><span id="monitorControlStatus" class="detail" role="status">Waiting for collector controls.</span></section>
  <section class="hero">
   <div id="diagnosis" class="panel diagnosis"><div class="eyebrow">Bottleneck clue</div><div id="clue" class="clue">Waiting for a game</div><p id="evidence" class="detail">The dashboard will attach when the profiler starts.</p><p class="detail"><b>Check next:</b> <span id="nextCheck">Start a game in the container.</span></p></div>
   <div class="panel identity"><div><span>Game</span><span id="game">—</span></div><div><span>Container</span><span id="container">—</span></div><div><span>Backend indicators</span><span id="backend">—</span></div><div><span>Updated</span><span id="updated">—</span></div></div>
@@ -79,7 +80,7 @@ function chart(canvas,series,opts={}){
  c.fillStyle='#92a6b1';c.fillText('older',left,h-4);c.fillText('now',left+pw-24,h-4)
 }
 let latest=null;
-window.renderProfileData=function(d){latest=d;const age=Date.now()-Date.parse(d.generated_at);const live=age<10000;const status=$('status');status.className='status '+(live?'live':'stale');put('statusText',live?'LIVE · updating':`Paused · last sample ${Math.round(age/1000)}s ago`);
+window.renderProfileData=function(d){latest=d;const age=Date.now()-Date.parse(d.generated_at);const stopped=d.monitoring&&d.monitoring.collector_state==='stopped';const live=!stopped&&age<10000;const status=$('status');status.className='status '+(live?'live':'stale');put('statusText',stopped?'Monitoring stopped':live?'LIVE · updating':`Paused · last sample ${Math.round(age/1000)}s ago`);
  put('game',d.game==='Unavailable'?'Waiting for game':`${d.game} · PID ${d.game_pid}`);put('container',d.container==='auto'?'Detecting':d.container);put('backend',d.backend);put('updated',new Date(d.generated_at).toLocaleTimeString());
  put('clue',d.assessment);put('evidence',d.evidence);put('nextCheck',d.next_check);$('diagnosis').className='panel diagnosis '+(d.assessment.includes('No clear')?'good':d.assessment.includes('JIT')||d.assessment.includes('Memory')?'hot':'');
  put('p95',fmt(d.surface.p95_ms)+' ms');put('p95Hint',`${d.surface.spikes_33} over 33 ms · ${d.surface.spikes_50} over 50 ms · ${d.surface.updates} updates`);
@@ -111,11 +112,12 @@ window.renderDeepProfile=function(d){
 function loadDeep(){const s=document.createElement('script');s.src='deep-profile-data.js?t='+Date.now();s.onload=()=>s.remove();s.onerror=()=>s.remove();document.head.append(s)}
 loadDeep();setInterval(loadDeep,5000);
 function load(){const s=document.createElement('script');s.src='work/live-sessions/live-data.js?t='+Date.now();s.onload=()=>s.remove();s.onerror=()=>{s.remove();if(!latest)put('statusText','Waiting for sampler')};document.head.append(s)}
-load();setInterval(load,1500);setInterval(()=>{if(latest){const age=Date.now()-Date.parse(latest.generated_at);if(age>10000){$('status').className='status stale';put('statusText',`Paused · last sample ${Math.round(age/1000)}s ago`)}}},1000);
+load();setInterval(load,1500);setInterval(()=>{if(latest){const age=Date.now()-Date.parse(latest.generated_at);if(latest.monitoring&&latest.monitoring.collector_state==='stopped'){$('status').className='status stale';put('statusText','Monitoring stopped')}else if(age>10000){$('status').className='status stale';put('statusText',`Paused · last sample ${Math.round(age/1000)}s ago`)}}},1000);
 window.addEventListener('resize',()=>{if(latest)window.renderProfileData(latest)});
 </script>
 <script src="scripts/dashboard-learning.js"></script>
 <script src="scripts/thread-timeline.js"></script>
 <script src="scripts/graphics-activity.js"></script>
+<script src="scripts/monitor-control.js"></script>
 </body>
 </html>

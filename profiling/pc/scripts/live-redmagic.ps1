@@ -13,6 +13,7 @@ $ErrorActionPreference='Stop'
 # Only one collector may poll a phone in this Windows session.
 $collectorMutex=New-Object System.Threading.Mutex($false,('Local\TyrantlatorLiveCollector-'+$Serial))
 $collectorOwnsMutex=$false
+$monitorControl=$null;$snapshot=$null
 try{
  try{$collectorOwnsMutex=$collectorMutex.WaitOne(0)}
  catch [System.Threading.AbandonedMutexException]{$collectorOwnsMutex=$true}
@@ -20,6 +21,8 @@ try{
   Write-Host 'Live monitoring is already running for this phone. Use the existing dashboard.'
   return
  }
+. (Join-Path $PSScriptRoot 'monitor-control.ps1')
+$monitorControl=Start-MonitorControl
 . (Join-Path $PSScriptRoot 'read-app-profile.ps1')
 . (Join-Path $PSScriptRoot 'read-process-family.ps1')
 . (Join-Path $PSScriptRoot 'read-game-threads.ps1')
@@ -195,6 +198,7 @@ $schedulerCommand=if($EnableSchedulerStats){'awk ''{print "SCHED", FILENAME, $0}
 $shell=$shell.Replace('SCHEDULER_SAMPLE_PLACEHOLDER',$schedulerCommand)
 $shell=$shell.Replace('GAME_PLACEHOLDER',$GameProcess.ToLowerInvariant()).Replace("`r",'')
 while((Get-Date) -lt $until){
+ if(Receive-MonitorStop -Control $monitorControl){break}
  if(-not $surfaceLayer){$surfaceLayer=Get-ActiveGameSurface}
  if($Package -eq 'auto' -and $surfaceLayer -and $surfaceLayer -match 'SurfaceView\[([^/]+)/'){$activePackage=$Matches[1]}
  $frameTime='Waiting for surface updates';$frameRate='Waiting for surface updates';$newFrameCount=0
@@ -521,7 +525,7 @@ while((Get-Date) -lt $until){
   session=$sessionId;generated_at=$now.ToString('o');csv_path=$logPath;target_fps=$TargetFps
   game=$gameName;game_pid=$gamePid;container=$activePackage;backend=$backendDisplay
   app_profile=$appProfile
-  monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats}
+  monitoring=[pscustomobject]@{scheduler_stats_enabled=[bool]$EnableSchedulerStats;collector_state='running';stop_url=$monitorControl.url}
   graphics_workers=$gameThreads.groups
   game_threads=[pscustomobject]@{timeline_complete=($gameThreads.rows.Count -le 512);timeline_rows=@($gameThreads.rows | Select-Object -First 512);total=$gameThreads.rows.Count;measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_ms_per_s}).Count;queue_measured=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s}).Count;queue_rows=@($gameThreads.rows | Where-Object {$null -ne $_.cpu_queue_ms_per_s} | Sort-Object cpu_queue_ms_per_s -Descending | Select-Object -First 5);rows=@($gameThreads.rows | Select-Object -First 20);status=$(if($gameThreads.rows.Count){'Live CPU deltas; roles inferred from thread names'}else{'Unavailable: game thread counters missing'})}
   process_family=$family.rows
@@ -599,6 +603,16 @@ while((Get-Date) -lt $until){
  Start-Sleep -Seconds 1
 }
 }finally{
+ if($monitorControl){
+  $monitorControl.listener.Stop()
+  if($snapshot){
+   $snapshot.monitoring.collector_state='stopped'
+   try{
+    $json=$snapshot | ConvertTo-Json -Depth 8 -Compress
+    [IO.File]::WriteAllText($DashboardDataPath,('window.profileData='+$json+';if(window.renderProfileData){window.renderProfileData(window.profileData);}'),(New-Object Text.UTF8Encoding($false)))
+   }catch{Write-Warning 'Could not mark the dashboard stopped.'}
+  }
+ }
  if($collectorOwnsMutex){$collectorMutex.ReleaseMutex()}
  $collectorMutex.Dispose()
 }
