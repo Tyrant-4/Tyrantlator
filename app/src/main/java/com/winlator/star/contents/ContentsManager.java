@@ -118,6 +118,7 @@ public class ContentsManager {
                     remoteProfile.type = ContentProfile.ContentType.getTypeByName(object.getString("type"));
                     remoteProfile.verName = object.getString("verName");
                     remoteProfile.verCode = object.getInt("verCode");
+                    remoteProfile.autoUpdate = object.optBoolean("autoUpdate", true);
                     String versionName = object.optString("versionName", "");
                     remoteProfile.versionName = versionName.isEmpty() ? null : versionName;
                     remoteProfiles.add(remoteProfile);
@@ -307,6 +308,7 @@ public class ContentsManager {
             profile.type = ContentProfile.ContentType.getTypeByName(typeName);
             profile.verName = verName;
             profile.verCode = verCode;
+            profile.autoUpdate = profileJSONObject.optBoolean("autoUpdate", true);
             profile.desc = desc;
             profile.fileList = fileList;
             return profile;

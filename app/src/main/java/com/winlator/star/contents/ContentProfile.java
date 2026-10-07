@@ -65,6 +65,8 @@ public class ContentProfile {
     public String wineBinPath;
     public String winePrefixPack;
     public String remoteUrl;
+    // Local diagnostic layers can opt out of update suggestions without losing manual selection.
+    public boolean autoUpdate = true;
     // Catalog rows only (contents.json "versionName"): the wcp profile's versionName, i.e. the
     // layer LINE a container is bound to ("11.0-6-arm64ec"). verName on a remote row is just the
     // display label ("GE-Proton-11.0-6-arm64ec (v5)"). null for installed profiles and for rows

@@ -68,6 +68,7 @@ class ContainerLayerUpdater(private val context: Context) {
         val entry = parseEntry(current) ?: return null
         val candidates = contentsManager.getProfiles(entry.type) ?: return null
         val best = candidates
+            .filter { it.autoUpdate }
             .filter { it.verName == entry.versionName && it.verCode > entry.verCode }
             .filter { ContentsManager.getInstallDir(context, it).isDirectory }
             .maxByOrNull { it.verCode } ?: return null
@@ -92,6 +93,7 @@ class ContainerLayerUpdater(private val context: Context) {
             ?.coerceAtLeast(entry.verCode) ?: entry.verCode
         val arch = archOf(entry.versionName)
         val best = (contentsManager.getProfiles(entry.type) ?: return null)
+            .filter { it.autoUpdate }
             .filter { !it.remoteUrl.isNullOrEmpty() && it.type == entry.type }
             .filter { it.versionName == entry.versionName && archOf(it.versionName) == arch }
             .filter { it.verCode > floor }
