@@ -1081,11 +1081,14 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
     fun onWineVersionChanged(version: String) {
         if (version !in wineVersionEntries) return
         val wasArm64 = isArm64EC
+        val previousBox64Version = selectedBox64Version
         selectedWineVersion = version
         coerceAudioDriverForWine()      // a switch to an unsupported layer drops a stale DirectAudio pick
         // Wayland is only offered on a layer that ships winewayland + its Wayland Turnip: snap back to X11.
         if (isWaylandStored && !isWineWaylandCapable(version)) displayBackend = Container.DISPLAY_BACKEND_X11
         refreshWineDependent(version)   // updates isArm64EC + swaps the box64/wowbox64 list
+        if (wasArm64 == isArm64EC && previousBox64Version in box64VersionEntries)
+            selectedBox64Version = previousBox64Version
         refreshSyncCaps(version)        // re-grey the Sync pills; an unavailable pick falls back
 
         // CREATE mode only: a wine change can FLIP the architecture. applyArch() swapped the box64 list
