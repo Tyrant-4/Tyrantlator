@@ -183,7 +183,13 @@ public class WineRegistryEditor implements Closeable {
         setHexValue(key, name, data.toString());
     }
 
-    private String getRawValue(String key, String name) {
+    public boolean hasValue(String key, String name) {
+        lastParentKeyPosition = 0;
+        Location keyLocation = getKeyLocation(key);
+        return keyLocation != null && getValueLocation(keyLocation, name) != null;
+    }
+
+    public String getRawValue(String key, String name) {
         lastParentKeyPosition = 0;
         Location keyLocation = getKeyLocation(key);
         if (keyLocation == null) return null;

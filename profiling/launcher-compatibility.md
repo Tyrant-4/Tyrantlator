@@ -1,0 +1,11 @@
+# Permanent launcher compatibility — PUBG build 5
+
+New containers initialize Segoe UI interface LOGFONT metrics and scoped builtin UCRT overrides for EA Desktop, EA CEF subprocess, EA launch helper and EA Steam proxy. Existing containers migrate Tahoma metrics once, preserve other chosen fonts, and retain corrected metrics when Proton switches trigger general tweaks. No font binaries are bundled; Wine resolves the font through its existing substitution support.
+
+New containers use installed Mesa Turnip v26.3.0-20261003-r4-A8xx for the Vulkan display compositor, otherwise system. Existing container/shortcut WN-Turnip-1.19-p Axxx compositor selections migrate to that display driver. The guest game graphicsDriverConfig is unchanged, so WN remains available for the game's Vulkan rendering. Other compositor choices are retained. This is based on the verified split-driver Origins session; no FPS improvement claim.
+
+EA overrides are executable-specific. Global CRT policy, games, account data, save files and installed launcher DLLs are unchanged. Previously installed EA-local graphics DLL pins are retained. The repair does not guarantee every launcher version or Proton/driver combination; EA login still requires user credentials.
+
+Validation: Java 17 compiled actual compatibility helper, registry editor, LOGFONT and math classes. A real registry fixture verified default-font migration, byte-identical custom font preservation, new prefix metrics, idempotent repeat launches/system tweaks, four EA-specific overrides, unchanged global/game CRT, split compositor selection and missing-driver fallback. Windows fixture FileUtils adapts rename to Android/POSIX replacement semantics; Android application integration is additionally checked by the PUBG CI build.
+
+Phone verification: create a separate test container; inspect seeded registry/fonts and compositor selection. Relaunch existing container with WN game driver; verify visible Ubisoft and game output. Switch Proton in that test container and verify fonts survive. Launch installed EA App and verify rendered login/home interface. Do not use a running game's prefix for destructive tests or enter account credentials automatically.

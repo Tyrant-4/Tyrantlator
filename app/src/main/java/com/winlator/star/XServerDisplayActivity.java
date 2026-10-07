@@ -2877,6 +2877,14 @@ public class XServerDisplayActivity extends AppCompatActivity {
         }
 
         graphicsDriver = container.getGraphicsDriver();
+        AdrenotoolsManager compositorDrivers = new AdrenotoolsManager(this);
+        java.util.Collection<String> installedCompositors = compositorDrivers.enumarateInstalledDrivers();
+        String compatibleCompositor = com.winlator.star.core.LauncherCompatibility.resolveCompositor(
+                container.getRendererDriverId(), installedCompositors);
+        if (!java.util.Objects.equals(compatibleCompositor, container.getRendererDriverId())) {
+            container.setRendererDriverId(compatibleCompositor);
+            container.saveData();
+        }
         rendererDriverId = container.getRendererDriverId();
         String graphicsDriverConfig = container.getGraphicsDriverConfig();
         audioDriver = container.getAudioDriver();
@@ -2896,6 +2904,13 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (shortcut != null) {
             graphicsDriver = shortcut.getExtra("graphicsDriver", container.getGraphicsDriver());
             rendererDriverId = shortcut.getExtra("rendererDriverId", container.getRendererDriverId());
+            String compatibleShortcutCompositor = com.winlator.star.core.LauncherCompatibility.resolveCompositor(
+                    rendererDriverId, installedCompositors);
+            if (!java.util.Objects.equals(compatibleShortcutCompositor, rendererDriverId)) {
+                rendererDriverId = compatibleShortcutCompositor;
+                shortcut.putExtra("rendererDriverId", rendererDriverId);
+                shortcut.saveData();
+            }
             graphicsDriverConfig = shortcut.getExtra("graphicsDriverConfig", container.getGraphicsDriverConfig());
             audioDriver = shortcut.getExtra("audioDriver", container.getAudioDriver());
             emulator = shortcut.getExtra("emulator", container.getEmulator());
@@ -7786,6 +7801,9 @@ public class XServerDisplayActivity extends AppCompatActivity {
             container.putExtra("patternVersion", PATTERN_CONTENT_VERSION);
             containerDataChanged = true;
         }
+
+        com.winlator.star.core.LauncherCompatibility.apply(
+                new File(container.getRootDir(), ".wine/user.reg"), false);
 
         String dxwrapper = this.dxwrapper;
 

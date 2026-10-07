@@ -11,6 +11,8 @@ import androidx.preference.PreferenceManager;
 
 import com.winlator.star.R;
 import com.winlator.star.contents.ContentsManager;
+import com.winlator.star.contents.AdrenotoolsManager;
+import com.winlator.star.core.LauncherCompatibility;
 import com.winlator.star.core.Callback;
 import com.winlator.star.core.FileUtils;
 import com.winlator.star.core.MSLink;
@@ -226,6 +228,10 @@ public class ContainerManager {
                 FileUtils.delete(containerDir);
                 return null;
             }
+
+            LauncherCompatibility.apply(new File(containerDir, ".wine/user.reg"), true);
+            container.setRendererDriverId(LauncherCompatibility.defaultCompositor(
+                    new AdrenotoolsManager(context).enumarateInstalledDrivers()));
 
             // "Run as administrator" toggle (default ON). Wine's wineboot leaves EnableLUA=1 for most
             // Wine versions (only some prefixPacks ship it off), which makes installers/tools that
