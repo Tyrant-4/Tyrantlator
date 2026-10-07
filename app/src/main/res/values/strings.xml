@@ -511,6 +511,7 @@
         <b>Wine version</b><br /><br />
         The compatibility layer that runs the Windows game — it translates Windows into Android without a real Windows install. <i><b>Proton</b></i> is a gaming-tuned build of Wine. Newer builds fix more games; leave it on the default unless a game needs a specific one.
     ]]></string>
+    <string name="container_layer_change_failed">Could not change Proton/Wine: %1$s</string>
     <string name="help_sync_mode"><![CDATA[
         <b>Sync</b><br /><br />
         Windows games constantly tell their threads to wait for each other (“wait until this is loaded”, “signal when the frame is ready”). Wine has several ways to handle that; the faster ones mean less stutter and CPU overhead. This setting picks which one the game uses. Options the selected compatibility layer can\'t do are greyed out.<br /><br />
