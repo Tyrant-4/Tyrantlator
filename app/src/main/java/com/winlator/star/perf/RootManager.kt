@@ -185,6 +185,14 @@ object RootManager {
      * writes a sysfs node the safety pipeline must be able to unwind goes through [writeNode] instead,
      * so this never touches [PerfRevertRegistry].
      */
+    /** Network setup only. Never log script text, stdout/stderr, paths containing credentials. */
+    fun runNetworkScript(script: String): String {
+        if (!isGranted) return "ROOT_REQUIRED"
+        return try {
+            val result = Shell.cmd(java.io.ByteArrayInputStream(("(\n" + script + "\n)\n").toByteArray(Charsets.UTF_8))).exec()
+            if (result.isSuccess) "OK" else result.code.toString()
+        } catch (_: Throwable) { "FAILED" }
+    }
     fun runCommand(cmd: String): Boolean {
         if (!isGranted) {
             Log.d(TAG, "runCommand skipped (state=${_state.value}): $cmd")

@@ -31,6 +31,11 @@ on:
         required: false
         type: boolean
         default: true
+      verify_network:
+        description: 'Run the network drive address and shortcut tests'
+        required: false
+        type: boolean
+        default: false
     secrets:
       # Samsung Galaxy Performance SDK jar (base64), optional. Supplied only by callers that
       # opt in (test builds). When absent the build proceeds without it and the Galaxy
@@ -484,6 +489,9 @@ jobs:
           echo "No Galaxy SDK secret set — building without it (Galaxy feature dormant)."
         fi
 
+    - name: Verify network drive address and shortcut tests
+      if: ${{ inputs.verify_network && matrix.flavor.id == 'pubg' }}
+      run: ./gradlew testPubgReleaseUnitTest --tests com.winlator.star.network.NetworkAddressTest -Dorg.gradle.jvmargs="-Xmx5g -XX:MaxMetaspaceSize=1g"
     - name: Build with Gradle
       # ONE flavor per job → only one ~588MB APK packages here, so the old
       # `--no-parallel --max-workers=1` OOM-guard is dropped; full workers now.

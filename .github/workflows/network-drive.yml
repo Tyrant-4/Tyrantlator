@@ -1,0 +1,12 @@
+name: Network Drive PUBG build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      release_number: tyrantlator-network-6
+      pubg_only: true
+      verify_network: true
