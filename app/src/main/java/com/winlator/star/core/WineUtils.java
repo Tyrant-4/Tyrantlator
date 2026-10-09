@@ -43,14 +43,7 @@ public abstract class WineUtils {
     }
 
     private static void setWindowMetrics(WineRegistryEditor registryEditor) {
-        byte[] fontNormalData = (new MSLogFont()).toByteArray();
-        byte[] fontBoldData = (new MSLogFont()).setWeight(700).toByteArray();
-        registryEditor.setHexValue("Control Panel\\Desktop\\WindowMetrics", "CaptionFont", fontBoldData);
-        registryEditor.setHexValue("Control Panel\\Desktop\\WindowMetrics", "IconFont", fontNormalData);
-        registryEditor.setHexValue("Control Panel\\Desktop\\WindowMetrics", "MenuFont", fontNormalData);
-        registryEditor.setHexValue("Control Panel\\Desktop\\WindowMetrics", "MessageFont", fontNormalData);
-        registryEditor.setHexValue("Control Panel\\Desktop\\WindowMetrics", "SmCaptionFont", fontNormalData);
-        registryEditor.setHexValue("Control Panel\\Desktop\\WindowMetrics", "StatusFont", fontNormalData);
+        LauncherCompatibility.seedMissingFonts(registryEditor);
     }
 
     public static void applySystemTweaks(Context context, WineInfo wineInfo) {

@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  * refreshes those copies later, so pointing the container at a newer build of the same line needs
  * (a) the `wineVersion` swap, (b) a refresh of the builtin copies (native overrides such as DXVK or
  * FEX/wowbox64 are left alone — see [ContainerManager.refreshCommonDlls]) and (c) the app-side
- * registry-tweak cache cleared so `applyGeneralPatches` re-runs. Wine's own `wine.inf` update runs
+ * graphics-wrapper installation marker cleared so its selected DLLs re-apply. Wine's own `wine.inf` update runs
  * on the next launch by itself (`.update-timestamp` no longer matches the new layer's `wine.inf`).
  *
  * Before touching anything the config file and the three registry hives are snapshotted under
@@ -194,7 +194,7 @@ class ContainerLayerUpdater(private val context: Context) {
 
     /**
      * The shared write half of [update] and [switchLine]: snapshot the config + hives, swap
-     * `wineVersion`, clear the tweak cache, refresh the builtin copies from [targetDir]. Every
+     * `wineVersion`, preserve prefix settings and caches, refresh the builtin copies from [targetDir]. Every
      * guardrail has run before this is called.
      */
     private fun swap(
@@ -222,7 +222,7 @@ class ContainerLayerUpdater(private val context: Context) {
 
     /**
      * Put [container] back on [snapshot]'s old layer: registry hives restored from the snapshot,
-     * `wineVersion` reverted, builtin copies refreshed from the OLD layer, tweak cache cleared. The
+     * `wineVersion` reverted, builtin copies refreshed from the OLD layer, wrapper marker cleared. The
      * snapshot folder is removed on success. The container's current settings (`.container`) are
      * kept — only the layer field changes; the snapshotted copy stays on disk until the folder goes.
      */
@@ -329,9 +329,12 @@ class ContainerLayerUpdater(private val context: Context) {
         private const val MANIFEST = "manifest.json"
         private val SNAPSHOT_FILES = listOf(".container", ".wine/system.reg", ".wine/user.reg", ".wine/userdef.reg")
 
-        // patternVersion: re-runs applyGeneralPatches (app-side registry tweaks) on the next launch.
-        // dxwrapper: re-applies the wrapper DLLs — cheap insurance, the refresh never touches them.
-        private val CLEARED_EXTRAS = listOf("patternVersion", "dxwrapper")
+        // A layer switch is not an app/common-pattern update. Keep patternVersion so the next
+        // launch retains registry preferences and theme/driver state instead of reapplying defaults.
+        // App/image/pattern upgrades still trigger their own version gates in setupWineSystemFiles.
+        // Shader caches and game configuration files are never removed by this operation.
+        // dxwrapper: re-applies the same selected wrapper DLLs after builtin refresh.
+        private val CLEARED_EXTRAS = listOf("dxwrapper")
 
         /** "v5" for `Proton-11.0-6-arm64ec-5` — the short label used by the badge and menu. */
         fun codeLabel(entryName: String): String = "v" + entryName.substringAfterLast('-')

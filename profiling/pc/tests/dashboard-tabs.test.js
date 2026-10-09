@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const panels=new Map(),storage=new Map();let resized=0,focused;
+const tabs=['overview','frames','cpu'].map(key=>({id:'tab-'+key,attrs:{'aria-controls':'panel-'+key},getAttribute(k){return this.attrs[k]},setAttribute(k,v){this.attrs[k]=v},focus(){focused=this.id}}));
+for(const t of tabs)panels.set(t.attrs['aria-controls'],{hidden:true});
+const context={document:{querySelectorAll:()=>tabs,getElementById:id=>panels.get(id)},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},window:{dispatchEvent:()=>resized++},Event:class{}};
+vm.runInNewContext(fs.readFileSync(require.resolve('../scripts/dashboard-tabs.js'),'utf8'),context);
+assert.equal(panels.get('panel-overview').hidden,false);assert.equal(tabs[0].attrs['aria-selected'],'true');
+tabs[1].onclick();assert.equal(panels.get('panel-frames').hidden,false);assert.equal(panels.get('panel-overview').hidden,true);
+tabs[1].onkeydown({key:'ArrowRight',preventDefault(){}});assert.equal(focused,'tab-cpu');assert.equal(tabs[2].tabIndex,0);
+tabs[2].onkeydown({key:'Home',preventDefault(){}});assert.equal(focused,'tab-overview');assert.ok(resized>=4);
+console.log('PASS: tab selection, hidden panels, keyboard navigation, focus and chart resize');

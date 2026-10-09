@@ -16,6 +16,7 @@ import com.winlator.star.box64.Box64Preset
 import com.winlator.star.box64.Box64PresetManager
 import com.winlator.star.container.Container
 import com.winlator.star.container.ContainerManager
+import com.winlator.star.container.ContainerLayerUpdater
 import com.winlator.star.contentdialog.DXVKConfigDialog
 import com.winlator.star.contents.ContentProfile
 import com.winlator.star.contents.ContentsManager
@@ -525,7 +526,7 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
             wineList.add(ContentsManager.getEntryName(p))
         for (p in contentsManager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON))
             wineList.add(ContentsManager.getEntryName(p))
-        wineVersionEntries = wineList
+        wineVersionEntries = compatibleWineVersions(wineList)
 
         // Bundled entries + user-imported wrappers (issue #132 Step 2). Built via the SHARED
         // WrapperManager.driverEntries helper so this list and the ShortcutsScreen one can never
@@ -613,7 +614,7 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
         val seed = c ?: template
 
         containerName = if (c != null) c.name else "${context.getString(R.string.container)}-${manager.getNextContainerId()}"
-        wineVersionEnabled = !isEditMode
+        wineVersionEnabled = wineVersionEntries.isNotEmpty()
 
         // Screen size: the real container / saved defaults profile wins; otherwise fit this device's
         // panel shape (1280x720 on 16:9 and wider, 1280x800 on 16:10, 1280x960 on 4:3).
@@ -1078,12 +1079,16 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onWineVersionChanged(version: String) {
+        if (version !in wineVersionEntries) return
         val wasArm64 = isArm64EC
+        val previousBox64Version = selectedBox64Version
         selectedWineVersion = version
         coerceAudioDriverForWine()      // a switch to an unsupported layer drops a stale DirectAudio pick
         // Wayland is only offered on a layer that ships winewayland + its Wayland Turnip: snap back to X11.
         if (isWaylandStored && !isWineWaylandCapable(version)) displayBackend = Container.DISPLAY_BACKEND_X11
         refreshWineDependent(version)   // updates isArm64EC + swaps the box64/wowbox64 list
+        if (wasArm64 == isArm64EC && previousBox64Version in box64VersionEntries)
+            selectedBox64Version = previousBox64Version
         refreshSyncCaps(version)        // re-grey the Sync pills; an unavailable pick falls back
 
         // CREATE mode only: a wine change can FLIP the architecture. applyArch() swapped the box64 list
@@ -1120,7 +1125,17 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
             wineList.add(ContentsManager.getEntryName(p))
         for (p in contentsManager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON))
             wineList.add(ContentsManager.getEntryName(p))
-        wineVersionEntries = wineList
+        wineVersionEntries = compatibleWineVersions(wineList)
+        wineVersionEnabled = wineVersionEntries.isNotEmpty()
+    }
+
+    private fun compatibleWineVersions(versions: List<String>): List<String> {
+        val c = container ?: return versions
+        val current = WineInfo.fromIdentifier(context, contentsManager, c.wineVersion)
+        return versions.filter { version ->
+            val candidate = WineInfo.fromIdentifier(context, contentsManager, version)
+            candidate.isArm64EC() == current.isArm64EC() && candidate.isWin64() == current.isWin64()
+        }
     }
 
     fun refreshBox64Versions() {
@@ -1219,7 +1234,7 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun doConfirm(
+    private suspend fun doConfirm(
         gdConfig: String,
         dxConfig: String,
         fpsConfig: String,
@@ -1231,6 +1246,18 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         val c = container
         if (c != null) {
+            if (c.wineVersion != selectedWineVersion) {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { ContainerLayerUpdater(context).switchLine(contentsManager, c, selectedWineVersion).getOrThrow() }
+                }
+                if (result.isFailure) {
+                    PreloaderState.hide()
+                    isSaving = false
+                    AppUtils.showToast(context, context.getString(R.string.container_layer_change_failed,
+                        result.exceptionOrNull()?.message ?: selectedWineVersion))
+                    return
+                }
+            }
             // Edit mode — the form is written straight onto the real container.
             applyFormTo(c, gdConfig, dxConfig, fpsConfig, envVarsIn, cpuListIn, cpuListWoW64In,
                 colorAsString, seedControllerGlobals = false)

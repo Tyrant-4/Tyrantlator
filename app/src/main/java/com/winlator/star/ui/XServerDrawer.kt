@@ -3258,6 +3258,7 @@ private fun SeShaderToggle(label: String, checked: Boolean, enabled: Boolean = t
 private fun HudContent(state: XServerDrawerState) {
     val accent = MaterialTheme.colorScheme.primary
     val fpsConfig by state.fpsConfig.collectAsState()
+    val profilingEnabled by state.profilingEnabled.collectAsState()
 
     // Re-read the live display refresh rate when this tab opens so the "Rate" readout is fresh on
     // open; the display listener keeps it current while the drawer stays open.
@@ -3439,6 +3440,11 @@ private fun HudContent(state: XServerDrawerState) {
 
     // ═══ Master toggle: hides every HUD group below when off (matches the approved prototype). ═══
     ToggleRow("Show HUD", hudEnabled) { hudEnabled = it; apply() }
+    ToggleRow(stringResource(R.string.tyrantlator_live_profiling), profilingEnabled) {
+        state.onProfilingToggle?.accept(it)
+    }
+    Text(stringResource(R.string.tyrantlator_live_profiling_hint),
+        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
 
     // ── Performance group: always shown. The limiter + refresh live here regardless of the HUD. ──
     HudGroupLabel("Performance")

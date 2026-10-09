@@ -94,6 +94,8 @@ fun AppNavGraph(
             WrapperManagerScreen()
         }
 
+        composable(Screen.NetworkDrive.route) { com.winlator.star.ui.screens.NetworkDriveScreen(onOpenGames = { navController.navigate(Screen.Games.route) { launchSingleTop = true } }) }
+
         composable(Screen.FileManager.route) {
             FileManagerScreen()
         }

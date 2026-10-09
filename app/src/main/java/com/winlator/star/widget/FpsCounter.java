@@ -118,6 +118,31 @@ public class FpsCounter {
 
     public synchronized int getMaxFPS() { return maxFPS; }
 
+    /** Bounded, chronological copy for the optional PC profiler. No sorting or I/O under the lock. */
+    public synchronized ProfileSnapshot getProfileSnapshot() {
+        int n = Math.min(frametimeSize, 120);
+        float[] intervals = new float[n];
+        int start = (frametimeHead - n + FRAMETIME_RING_CAP) % FRAMETIME_RING_CAP;
+        for (int i = 0; i < n; i++) intervals[i] = frametimeRing[(start + i) % FRAMETIME_RING_CAP];
+        long now = SystemClock.elapsedRealtime();
+        long age = lastFrameTime == 0 ? -1 : now - lastFrameTime;
+        return new ProfileSnapshot(now, age, age >= 0 && age <= STALE_FPS_MS ? lastFPS : 0f, intervals);
+    }
+
+    public static final class ProfileSnapshot {
+        public final long elapsedMs;
+        public final long frameAgeMs;
+        public final float fps;
+        public final float[] intervalsMs;
+
+        ProfileSnapshot(long elapsedMs, long frameAgeMs, float fps, float[] intervalsMs) {
+            this.elapsedMs = elapsedMs;
+            this.frameAgeMs = frameAgeMs;
+            this.fps = fps;
+            this.intervalsMs = intervalsMs;
+        }
+    }
+
     // ---- Percentile lows (computed lazily from the frametime ring) ----------
 
     /** Immutable snapshot of the percentile lows + frametime extremes for one refresh. */

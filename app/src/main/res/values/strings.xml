@@ -4,7 +4,8 @@
     <!ENTITY TERMUX_X11_APP_NAME "Winlator:X11">
     ]>
 <resources>
-    <string name="app_name">Bannerlator Bionic</string>
+    <string name="app_name">Tyrantlator</string>
+    <string name="tyrantlator_build_identity">Tyrantlator · Profiling build 3\nTyrant-4 fork · Based on Bannerlator 3.1.5</string>
     <string name="run">Run</string>
     <string name="edit">Edit</string>
     <string name="remove">Remove</string>
@@ -510,6 +511,7 @@
         <b>Wine version</b><br /><br />
         The compatibility layer that runs the Windows game — it translates Windows into Android without a real Windows install. <i><b>Proton</b></i> is a gaming-tuned build of Wine. Newer builds fix more games; leave it on the default unless a game needs a specific one.
     ]]></string>
+    <string name="container_layer_change_failed">Could not change Proton/Wine: %1$s</string>
     <string name="help_sync_mode"><![CDATA[
         <b>Sync</b><br /><br />
         Windows games constantly tell their threads to wait for each other (“wait until this is loaded”, “signal when the frame is ready”). Wine has several ways to handle that; the faster ones mean less stutter and CPU overhead. This setting picks which one the game uses. Options the selected compatibility layer can\'t do are greyed out.<br /><br />
@@ -2583,4 +2585,6 @@ trying for speed, <b>notemplates</b> if you get driver crashes.
         <b>Microphone</b><br /><br />
         Lets a game use the microphone for voice chat. It is meant for the <b>games the client launches</b>, not for the Steam client. It does nothing in a Linux session yet: the switch is wired for the Windows side, and the Linux side that would carry the sound in is not in place.
     ]]></string>
+    <string name="tyrantlator_live_profiling">Live profiling</string>
+    <string name="tyrantlator_live_profiling_hint">Exports live frame data with the HUD hidden too. Remembers this game’s choice.</string>
 </resources>
