@@ -97,9 +97,9 @@ Before any **stable release** is published, all changes are **manually debugged 
 
 | | |
 |---|---|
-| **App label** | `Bannerlator Bionic` (standard) · `Bannerlator Bionic PuBG` (pubg) · `Bannerlator Bionic Ludashi` (ludashi) |
-| **Packages** | `com.winlator.banner` (standard) · `com.tencent.ig` (pubg) · `com.ludashi.benchmark` (ludashi) |
-| **Version** | Bannerlator **V 3.1.5** — built from Star **marcescence** (`versionName 3.1.5`, `versionCode 94`) |
+| **App label** | `Bannerlator Bionic` (standard) · `Bannerlator Bionic PuBG` (pubg) · `Bannerlator Bionic Ludashi` (ludashi) · `Bannerlator Bionic AnTuTu` (antutu) |
+| **Packages** | `com.winlator.banner` (standard) · `com.tencent.ig` (pubg) · `com.ludashi.benchmark` (ludashi) · `com.antutu.ABenchMark` (antutu) |
+| **Version** | Bannerlator **V 3.1.6-pre3** — built from Star **marcescence** (`versionName 3.1.6-pre3`, `versionCode 97`) |
 | **Android SDK** | `compileSdk 34` · `targetSdk 28` · `minSdk 26` (Android 8.0+) |
 | **Lineage** | Winlator → cmod → Bionic Nightly → Star Bionic → **marcescence** → **Bannerlator** |
 
@@ -131,6 +131,10 @@ Every report gets its own **public discussion thread**. You can reply as the ori
 - [🤖 AI Disclaimer](#-ai-disclaimer)
 - [ℹ️ Information](#ℹ️-information)
 - [🐛 Report a Mali GPU Issue](#-report-a-mali-gpu-game-issue)
+- [⬇️ Small updates, Win Components offline & smarter game adding (3.1.6)](#️-small-updates-win-components-offline--smarter-game-adding-316)
+- [⚡ Force SSBS, v14 layers & Mali on Wayland (3.1.6)](#-force-ssbs-v14-layers--mali-on-wayland-316)
+- [🆕 SteamLite Steam Input & Wayland xdg-shell v3 (3.1.6)](#-steamlite-steam-input--wayland-xdg-shell-v3-316)
+- [🎮 Headless Steam & Server Browser (3.1.6)](#-headless-steam--server-browser-316)
 - [🎬 Cutscenes & Codecs (3.1.5)](#-cutscenes--codecs-315)
 - [⚡ Fast OpenGL (3.1.4)](#-fast-opengl-314)
 - [🐧 Linux Steam Client (3.1.3)](#-linux-steam-client-313)
@@ -146,6 +150,43 @@ Every report gets its own **public discussion thread**. You can reply as the ori
 - [📄 License](#-license)
 
 ---
+
+## ⬇️ Small updates, Win Components offline & smarter game adding (3.1.6)
+
+**[3.1.6](https://github.com/The412Banner/Bannerlator/releases/tag/3.1.6) is the stable release of everything below (Headless Steam, Steam Input, Force SSBS and the v14 layers, Mali on Wayland, Box64EC), plus:**
+
+- **Small updates, from the next release on** — the in-app updater downloads a small patch (usually 5–25 MB instead of 525 MB), rebuilds the new app from the installed one, checks it's an exact copy of the release and installs it as a normal update. No patch for your version, or anything goes wrong → the full download, as before. 3.1.6 itself still downloads in full; first installs and this page always give the full APK.
+- **A new update notice** — a slide-in pill (Dismiss / View), a *What's new* pop-up with highlights and the real download size, and a download card with progress and Cancel. Automatic checks happen at most every six hours.
+- **Win Components install offline** — 113 of the 123 catalog components (VC++, .NET, DirectX, XNA, codecs, fonts…) are laid out straight into the container in seconds, without starting it.
+- **Adding games** — names from the game's own files, Steam's name, art and details found by title, an art picker in *Edit Game*, components suggested per game in folder import, scrolling game and container menus.
+- **`VKD3D_SHADER_MODEL=6_6`** by default on every container, so Unreal Engine 5 games such as *Gothic 1 Remake* no longer refuse DirectX 12.
+
+## ⚡ Force SSBS, v14 layers & Mali on Wayland (3.1.6)
+
+**First in [3.1.6-pre3](https://github.com/The412Banner/Bannerlator/releases/tag/3.1.6-pre3): a CPU speed fix for Wine on ARM, the v14 layers that carry it, and Wayland settings for Mali phones.**
+
+- **Force SSBS** — Wine on ARM kept switching off the CPU's SSBS feature on game threads (the slower, extra-safe way of handling memory). The **v14** layers carry Wine's own fix ([MR 12262](https://gitlab.winehq.org/wine/wine/-/merge_requests/12262)) and the toggle (Advanced tab, container and per game) is **on by default**; older layers get the bit back through a small add-on. Biggest gains expected on Snapdragon 8 Elite (Oryon) in CPU-heavy games.
+- **v14 layers** — all ten Proton layers, both Proton 10 layers included again, in the catalog ([release notes](https://github.com/The412Banner/proton-wine/releases/tag/build-bionic-layers-20261007-v14)).
+- **Mali on Wayland** — a **Mali (PanVK)** section in the Wayland driver settings, and **System** offered as the Wayland driver on Mali (experimental).
+- **Menu button** — Input Controls › Device: pick a controller button that opens the in-game side menu (off by default; B can't be picked). Also a Toy Story 2 window fix.
+
+## 🆕 SteamLite Steam Input & Wayland xdg-shell v3 (3.1.6)
+
+**First in [3.1.6-pre2](https://github.com/The412Banner/Bannerlator/releases/tag/3.1.6-pre2): Steam Input for SteamLite and xdg-shell version 3 to the Wayland compositor.**
+
+- **SteamLite Steam Input** — a per-game toggle and layout pick in the SteamLite launch options hands the controller to the game through Valve's own Steam Input layer (needs the **SteamLite v8** package, offered by the app). Keep it off for games that already read a controller themselves; the default layout keeps the pad a pad.
+- **Wayland xdg-shell v3** — the compositor now implements real positioners, pop-up windows and `reposition` and advertises version 3, which the Wayland driver of the new **Proton-CachyOS 11.0-20261005** layer requires to open any window. Layers asking for version 1 or 2 are unchanged.
+- **Proton-CachyOS 11.0-20261005** (arm64ec + x86_64, v13) is in the catalog — on app builds before 3.1.6-pre2 use it with X11.
+
+## 🎮 Headless Steam & Server Browser (3.1.6)
+
+**Since [3.1.6-pre1](https://github.com/The412Banner/Bannerlator/releases/tag/3.1.6-pre1), Steam games have a second online launch option next to SteamLite.** **Headless Steam** runs a game on the app's own signed-in Steam session: a small native host (Valve's Android Steam library, driven by the app) signs in on your account in about a second and the game talks to it through the Steam bridge in the Proton 11 layers — no Steam client window, nothing installed in the prefix, every Steam call native. Cloud saves, stats, achievements and multiplayer work; Counter-Strike: Source was the proving case, including a live community match.
+
+- **How to use it:** sign in to Steam in the app, then pick **Headless Steam** in a Steam shortcut's launch popup (Headless Steam / SteamLite / Goldberg / Raw). Needs the **v13** Proton 11 **arm64ec** layers from the catalog (the x86_64 layers and the Proton 10 layers have no Steam bridge).
+- **Find Servers works.** Valve's Android library has no working server browser, so the v13 layers carry their own: the app fetches the master list through Steam's Web API, the layer pings every server and feeds the game, and a small x86-64 front keeps the game's sort lookups inside the emulator — the list refreshes at 316 to 376 fps.
+- **VAC:** Headless Steam is **not** VAC-protected — Valve's Android library has no VAC scanner (only the Windows and x86 Linux clients do). Secure servers may admit you, but for a VAC session use **SteamLite**.
+- **Log Manager:** a Headless Steam toggle writes a per-game `headless_steam.txt` with a PASS/FAIL checklist of the session and the server browser.
+- **Box64EC (experimental, unofficial):** arm64ec containers also gain an **Emulator (64-bit)** picker (FEXCore, the supported default, or Box64EC). Box64EC components are built by The412Banner from the [box64](https://github.com/ptitSeb/box64) project's work-in-progress ARM64EC target and [airidosas252's PR #4480](https://github.com/ptitSeb/box64/pull/4480); they are not releases of the box64 project and the picker only appears once a Box64EC component is installed from the catalog.
 
 ## 🎬 Cutscenes & Codecs (3.1.5)
 
@@ -176,7 +217,7 @@ Every report gets its own **public discussion thread**. You can reply as the ori
 
 **Then:**
 
-1. **Download and install the APK.** There are three — just take **standard** unless you specifically use the pubg or ludashi build already.
+1. **Download and install the APK.** There are four — just take **standard** unless you specifically use the pubg, ludashi or antutu build already.
 2. **Open the app and go to Contents → Linux Runtime → Download.** This is about **755 MB**, once. It is not in the APK, so this step is required.
 3. When it finishes, a **Steam (Linux)** entry appears in your games list. **Tap it.**
 4. **First launch takes a few minutes.** A loading screen first downloads **Proton Experimental (ARM64)** (about 400 MB), then lets Steam download and update itself. There's a clock on screen so you know it's still working.
@@ -575,7 +616,7 @@ Besides the built-in download catalog, you can add **any** ReShade effect yourse
 Android/data/com.winlator.banner/files/ReShade/
 ```
 
-> 📁 That path is for the **Standard** build. For the other builds, swap the package name: **PuBG** → `Android/data/com.tencent.ig/files/ReShade/` · **Ludashi** → `Android/data/com.ludashi.benchmark/files/ReShade/`.
+> 📁 That path is for the **Standard** build. For the other builds, swap the package name: **PuBG** → `Android/data/com.tencent.ig/files/ReShade/` · **Ludashi** → `Android/data/com.ludashi.benchmark/files/ReShade/` · **AnTuTu** → `Android/data/com.antutu.ABenchMark/files/ReShade/`.
 
 **2. Make one folder per effect.** Name the folder whatever you want the effect to be **called in the menu** — for example `MySepia`.
 

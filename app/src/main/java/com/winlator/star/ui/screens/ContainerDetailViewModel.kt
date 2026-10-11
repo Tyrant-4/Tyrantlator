@@ -260,6 +260,9 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
     val emulator64Entries = listOf("FEXCore", "Box64EC")
     var selectedEmulator64 by mutableStateOf("FEXCore")
 
+    // Force SSBS (arm64ec only, opt-in): keeps the speculative-store fast path on for game threads.
+    var forceSsbs by mutableStateOf(true)
+
     var midiEntries by mutableStateOf(emptyList<String>()); private set
     var selectedMidiIndex by mutableStateOf(0)
 
@@ -905,6 +908,8 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
         }
         val current = compositorVersion()
         if ((current.isNotEmpty() && current != "System") || compositorFillJob?.isActive == true) return
+        // On Mali "System" is a choice the picker offers (maliSystemChoice): kept, never refilled.
+        if (current == "System" && com.winlator.star.core.MaliPanvk.isMaliGpu()) return
         compositorDriverSearching = true
         val preferred = defaultsProfileCompositorDriver()
         compositorFillJob = viewModelScope.launch {
@@ -913,6 +918,7 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
                        finally { if (compositorFillJob === coroutineContext[Job]) compositorDriverSearching = false }
             val now = compositorVersion()
             if (!isWaylandBackend || (now.isNotEmpty() && now != "System")) return@launch
+            if (now == "System" && com.winlator.star.core.MaliPanvk.isMaliGpu()) return@launch
             if (pick == null) { compositorDriverNoneUsable = true; return@launch }
             versionBeforeCompositorFill = now
             graphicsDriverConfig = withGraphicsDriverVersion(graphicsDriverConfig, pick)
@@ -966,6 +972,7 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
         selectedBox64ECVersion = archSeed?.box64ECVersion
             ?.takeIf { it.isNotEmpty() && box64ECVersionEntries.contains(it) }
             ?: (box64ECVersionEntries.firstOrNull() ?: "")
+        forceSsbs = archSeed?.isForceSsbs ?: true
 
         // FEXCore preset.
         val fexPreset = archSeed?.getFEXCorePreset() ?: prefs.getString("fexcore_preset", FEXCorePreset.INTERMEDIATE) ?: FEXCorePreset.INTERMEDIATE
@@ -1436,6 +1443,7 @@ class ContainerDetailViewModel(app: Application) : AndroidViewModel(app) {
         c.setFEXCorePreset(fexCorePresetIds.getOrElse(selectedFEXCorePresetIndex) { FEXCorePreset.INTERMEDIATE })
         c.setEmulator64(StringUtils.parseIdentifier(selectedEmulator64))
         c.setBox64ECVersion(selectedBox64ECVersion)
+        c.setForceSsbs(forceSsbs)
         c.desktopTheme       = buildDesktopThemeStr(colorAsString)
         c.setMidiSoundFont(if (selectedMidiIndex == 0) "" else midiEntries.getOrElse(selectedMidiIndex) { "" })
         c.setLC_ALL(lcAll)

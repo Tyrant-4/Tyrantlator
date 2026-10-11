@@ -32,7 +32,13 @@ public class Container {
     // opts in. EnvVars keeps "DXVK_HUD=" (index of '=' > 0) with an empty value, and DXVK renders no
     // overlay for an empty element list — so a fresh container starts with the HUD off.
     // No WINEESYNC: sync is the "Sync" setting (extra "syncMode", core.SyncSupport), written at launch.
-    public static final String DEFAULT_ENV_VARS = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true TU_DEBUG=noconform,sysmem DXVK_HUD=";
+    // VKD3D_SHADER_MODEL=6_6: VKD3D-Proton only advertises Shader Model 6.6 when the Vulkan driver has
+    // 64-bit buffer atomics + compute derivatives + required-subgroup-size control; Turnip through the
+    // wrapper tops out at 6.5, and Unreal Engine 5.3+ titles built for SM6 refuse anything lower
+    // ("DirectX 12 is not supported on your system"). The variable is a CEILING: a game asking for
+    // 5_1 or 6_0 still gets exactly that, DX11/DX9 never read it, and UE5 (Gothic 1 Remake, Pocket FIT)
+    // plays with it set. See ContainerManager.migrateVkd3dShaderModelDefault for existing containers.
+    public static final String DEFAULT_ENV_VARS = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true TU_DEBUG=noconform,sysmem DXVK_HUD= VKD3D_SHADER_MODEL=6_6";
     public static final String DEFAULT_SCREEN_SIZE = "1280x720";
 
     /**
@@ -181,6 +187,9 @@ public class Container {
     private String emulator;
     private String emulator64 = DEFAULT_EMULATOR64;
     private String box64ecVersion = "";
+    // Force SSBS (arm64ec only, on by default): WINE_FORCE_SSBS=1 for rebuilt layers plus libssbs.so preloaded
+    // for the rest, so game threads keep the CPU's speculative-store fast path after signal returns.
+    private boolean forceSsbs = true;
     private String renderer = "vulkan";
     private boolean exclusiveXInput = true;
     private ContainerManager containerManager;
@@ -449,6 +458,14 @@ public class Container {
 
     public String getBox64ECVersion() {
         return this.box64ecVersion;
+    }
+
+    public void setForceSsbs(boolean forceSsbs) {
+        this.forceSsbs = forceSsbs;
+    }
+
+    public boolean isForceSsbs() {
+        return this.forceSsbs;
     }
 
     public File getRootDir() {
@@ -1395,6 +1412,8 @@ public class Container {
             // Only written once set away from the defaults, so untouched containers serialize as before.
             if (!DEFAULT_EMULATOR64.equals(emulator64)) data.put("emulator64", emulator64);
             if (!box64ecVersion.isEmpty()) data.put("box64ecVersion", box64ecVersion);
+            // Always written: the default is on, so an "off" must be stored to survive a reload.
+            data.put("forceSsbs", forceSsbs);
             data.put("fexcorePreset", fexcorePreset);
             data.put("fexcoreVersion", fexcoreVersion);
             data.put("box64Preset", box64Preset);
@@ -1514,6 +1533,9 @@ public class Container {
                     break;
                 case "box64ecVersion":
                     setBox64ECVersion(data.getString(key));
+                    break;
+                case "forceSsbs":
+                    setForceSsbs(data.getBoolean(key));
                     break;
                 case "fexcoreVersion":
                     setFEXCoreVersion(data.getString(key));

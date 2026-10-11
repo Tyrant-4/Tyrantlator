@@ -1036,6 +1036,11 @@ private fun TopLevelFields(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                compositorDriverMaliSystem(compositorVersion, compositorChoices) -> Text(
+                    MALI_SYSTEM_DRIVER_NOTE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 compositorDriverUnusable(compositorVersion, compositorChoices, compositorChoicesLoaded) -> {
                     Text(
                         if (viewModel.compositorDriverNoneUsable)
@@ -2533,6 +2538,26 @@ private fun AdvancedTab(
                     onListChanged = { viewModel.reloadPresetLists(context); presetRevision++ },
                     onValuesChanged = { presetRevision++ },
                 )
+                Spacer(Modifier.height(8.dp))
+                // Force SSBS — WINE_FORCE_SSBS for rebuilt layers, libssbs.so preloaded for the rest.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = viewModel.forceSsbs,
+                        onCheckedChange = { viewModel.forceSsbs = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.force_ssbs))
+                        Text(
+                            stringResource(R.string.force_ssbs_summary),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.5.sp
+                        )
+                    }
+                    IconButton(onClick = { helpRes = R.string.help_force_ssbs }) {
+                        Icon(Icons.Default.Help, contentDescription = "What is this?", modifier = Modifier.size(18.dp))
+                    }
+                }
             }
         }
 
@@ -3134,7 +3159,8 @@ internal const val WAYLAND_DRIVER_SETTINGS_HELP =
  * (FD_DEV_FEATURES for the game's Turnip). Same keys as GraphicsDriverConfigDialog, so a choice
  * survives switching backends; OK writes only these back (withGraphicsDriverKeys). The X11 wrapper
  * plumbing (extensions, BCn, resource type, sync/present-wait) and Vulkan version are left out: nothing
- * on the Wayland path reads them, and the Wayland Turnips ignore MESA_VK_VERSION_OVERRIDE.
+ * on the Wayland path reads them, and the Wayland Turnips ignore MESA_VK_VERSION_OVERRIDE. On an Arm
+ * Mali GPU only, a "Mali (PanVK)" section adds maliMode, bcnEmulation and the panvk* keys (MaliPanvk).
  */
 @Composable
 internal fun WaylandDriverSettingsDialog(
@@ -3169,6 +3195,9 @@ internal fun WaylandDriverSettingsDialog(
     // A stored X11-only mode (immediate / relaxed) stays listed, labelled, so OK keeps it for X11.
     val presentValues = WAYLAND_PRESENT_MODES + (if (storedPresent in WAYLAND_PRESENT_MODES) emptyList() else listOf(storedPresent))
     val presentLabels = presentValues.map { if (it in WAYLAND_PRESENT_MODES) it else "$it (X11 only, not used here)" }
+    // Mali (PanVK) section: Arm Mali GPUs only (vendor 0x13B5); every other GPU sees and writes nothing new.
+    val isMali = remember { com.winlator.star.core.MaliPanvk.isMaliGpu() }
+    val mali = remember(initialConfig) { if (isMali) MaliPanvkSettingsState(context, cfg) else null }
 
     var helpRes by remember { mutableStateOf<Int?>(null) }
     helpRes?.let { HelpDialog(it) { helpRes = null } }
@@ -3248,6 +3277,7 @@ internal fun WaylandDriverSettingsDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                mali?.let { MaliPanvkSection(it) { res -> helpRes = res } }
             }
         },
         confirmButton = {
@@ -3260,7 +3290,7 @@ internal fun WaylandDriverSettingsDialog(
                             "maxDeviceMemory" to StringUtils.parseNumber(memoryEntry),
                             "presentMode" to presentMode,
                             "fdDevFeatures" to if (fdDevFeatures) "1" else "0",
-                        )
+                        ) + (mali?.keys() ?: emptyMap())
                     )
                 )
             }) { Text(stringResource(android.R.string.ok)) }
@@ -3343,7 +3373,16 @@ internal fun importedDriverVersions(context: Context): List<String> =
  * agree.
  */
 internal suspend fun compositorDriverChoices(context: Context): List<String> =
-    (supportedBundledDriverVersions(context) + importedDriverVersions(context)).distinct()
+    (maliSystemChoice() + supportedBundledDriverVersions(context) + importedDriverVersions(context)).distinct()
+
+/**
+ * On an Arm Mali GPU the picker also offers "System" (the phone's own Mali Vulkan driver): no
+ * bundled Turnip runs there, and with the Mali (PanVK) adapter switches some vendor drivers may
+ * import the game's frames. Picked explicitly, it is kept as-is (never refilled, and the launch
+ * does not swap in a bundled Turnip for it). Everywhere else "System" stays out of the list.
+ */
+internal suspend fun maliSystemChoice(): List<String> =
+    if (withContext(Dispatchers.IO) { com.winlator.star.core.MaliPanvk.isMaliGpu() }) listOf("System") else emptyList()
 
 /**
  * What the Wayland "Compositor driver" field shows for the stored `version`. The picker leaves
@@ -3360,9 +3399,21 @@ internal fun compositorDriverLabel(version: String, choices: List<String>, choic
     else -> version
 }
 
-/** True when [version] cannot drive the Wayland compositor: "System"/empty, or an id the picker doesn't offer. */
+/**
+ * True when [version] cannot drive the Wayland compositor: empty, "System" where the picker does
+ * not offer it (it does only on Mali, see [maliSystemChoice]), or an id the picker doesn't offer.
+ */
 internal fun compositorDriverUnusable(version: String, choices: List<String>, choicesLoaded: Boolean): Boolean =
-    version.isEmpty() || version == "System" || (choicesLoaded && version !in choices)
+    version.isEmpty() || (version == "System" && "System" !in choices) || (choicesLoaded && version !in choices)
+
+/** "System" picked on a Mali GPU, where the picker offers it: experimental, so the form says so. */
+internal fun compositorDriverMaliSystem(version: String, choices: List<String>): Boolean =
+    version == "System" && "System" in choices
+
+internal const val MALI_SYSTEM_DRIVER_NOTE =
+    "\"System\" uses your phone's own Mali Vulkan driver. Experimental on Wayland: it may show a black " +
+        "screen. Try it with the Mali (PanVK) switches in the driver gear; if it stays black, pick a PanVK driver or use X11."
+
 
 /**
  * The dmabuf-import device extensions the Wayland compositor enables at vkCreateDevice
@@ -3403,7 +3454,8 @@ internal suspend fun defaultCompositorDriver(context: Context, preferred: String
         val mgr = AdrenotoolsManager(context)
         val imported = importedDriverVersions(context).toSet()
         graphicsProbeMutex.withLock {
-            val usable = choices.map { it to compositorDriverVerdict(context, mgr, it, it in imported) }
+            // "System" (offered on Mali only) is never auto-picked: it has to be the user's choice.
+            val usable = choices.filter { it != "System" }.map { it to compositorDriverVerdict(context, mgr, it, it in imported) }
                 .filter { it.second.usable }
             val newest = usable
                 .maxWithOrNull(Comparator { a, b -> compareVulkanVersions(a.second.vulkanVersion, b.second.vulkanVersion) })
@@ -4242,7 +4294,9 @@ internal fun GraphicsDriverConfigDialog(
                     val v = (detectedValues[key] ?: "").replace(";", "").replace("=", "")
                     ";$key=$v"
                 }
-                onConfirm(config + detectedPart)
+                // The Wayland gear's Mali (PanVK) keys have no control here: carry them through as stored.
+                val maliPart = com.winlator.star.core.MaliPanvk.KEYS.filter { it in cfg }.joinToString("") { ";$it=${cfg[it]}" }
+                onConfirm(config + detectedPart + maliPart)
             }) { Text(stringResource(android.R.string.ok)) }
         },
         dismissButton = {
