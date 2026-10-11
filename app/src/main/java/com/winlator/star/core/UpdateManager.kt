@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object UpdateManager {
     private const val TAG = "BL_UPDATE"
-    private const val REPO = "Tyrant-4/Bannerlator"
+    private const val REPO = "Tyrant-4/Tyrantlator"
     const val RELEASES_PAGE = "https://github.com/$REPO/releases/latest"
     // The manifests live on the orphan `manifest` branch, served raw: reading them there counts
     // nothing (the release-asset URL below bumped update.json's download_count on every check,
