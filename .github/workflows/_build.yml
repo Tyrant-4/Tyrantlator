@@ -22,6 +22,11 @@ name: _build (reusable matrix build)
 on:
   workflow_call:
     inputs:
+      source_ref:
+        description: 'Exact source commit to build (empty uses caller ref)'
+        required: false
+        type: string
+        default: ''
       release_number:
         description: 'Label for APK file names'
         required: true
@@ -65,6 +70,8 @@ jobs:
     - name: Clone repository
       uses: actions/checkout@v4
       with:
+        ref: ${{ inputs.source_ref || github.sha }}
+        persist-credentials: false
         submodules: recursive
         fetch-depth: 1          # was 20 — the version step only needs HEAD
 
